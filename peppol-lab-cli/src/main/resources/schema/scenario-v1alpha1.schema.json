@@ -30,7 +30,7 @@
     },
     "requires": {
       "type": "array",
-      "items": { "enum": ["SMP_LOOKUP", "SMP_PROVISION", "AS4_SEND", "AS4_RECEIVE", "AP_SUBMIT", "TRANSACTION_STATUS", "EVIDENCE", "FAULT_INJECTION"] },
+      "items": { "enum": ["DNS_LOOKUP", "SMP_LOOKUP", "SMP_PROVISION", "AS4_SEND", "AS4_RECEIVE", "AP_SUBMIT", "TRANSACTION_STATUS", "EVIDENCE", "FAULT_INJECTION"] },
       "uniqueItems": true
     },
     "steps": {

@@ -1,0 +1,16 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: dns-controlled-timeout
+  description: Reports an injected DNS timeout without converting it to a pass or generic error
+  tags: [dns, negative, resilience, timeout]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [DNS_LOOKUP, FAULT_INJECTION]
+steps:
+  - id: resolve-unresponsive-domain
+    target: dns-fixture
+    action: dns.lookup
+    with: { name: "timeout.sml.test", type: NAPTR, timeoutMs: 75 }
+    expect:
+      outcome: TIMEOUT
+      maxDurationMs: 500

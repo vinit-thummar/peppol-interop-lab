@@ -1,0 +1,18 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: dns-naptr-success
+  description: Resolves an authoritative SMP NAPTR record from the local discovery fixture
+  tags: [dns, smp, positive, discovery]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [DNS_LOOKUP]
+steps:
+  - id: resolve-smp
+    target: dns-fixture
+    action: dns.lookup
+    with: { name: "ok.sml.test", type: NAPTR, tcp: true }
+    expect:
+      outcome: SUCCESS
+      contains: ["Meta:SMP", "http://127.0.0.1:"]
+      headers: { DNS-Rcode: NOERROR }
+      maxDurationMs: 1000

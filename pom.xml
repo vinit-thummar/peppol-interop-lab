@@ -37,7 +37,10 @@
     <junit.version>5.12.1</junit.version>
     <picocli.version>4.7.7</picocli.version>
     <assertj.version>3.27.3</assertj.version>
+    <bouncycastle.version>1.85</bouncycastle.version>
+    <dnsjava.version>3.6.3</dnsjava.version>
     <phase4.version>4.5.4</phase4.version>
+    <slf4j.version>2.0.18</slf4j.version>
   </properties>
 
   <dependencyManagement>
@@ -55,6 +58,11 @@
         <version>${junit.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
+        <version>${slf4j.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

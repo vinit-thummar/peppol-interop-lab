@@ -1,3 +1,4 @@
 io.github.vinitthummar.peppollab.adapters.StandardSmpAdapter
 io.github.vinitthummar.peppollab.adapters.DirectAs4Adapter
 io.github.vinitthummar.peppollab.adapters.PhossAdapter
+io.github.vinitthummar.peppollab.adapters.DnsAdapter

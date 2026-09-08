@@ -20,6 +20,8 @@ class SecurityUtilitiesTest {
     assertThatThrownBy(() -> ProductionGuard.check(production, false))
         .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("--allow-production");
     ProductionGuard.check(production, true);
+    assertThatThrownBy(() -> ProductionGuard.check(URI.create("https://prod.tech.peppol.org"), false))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test

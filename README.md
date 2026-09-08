@@ -27,9 +27,20 @@ See the [official eDelivery specification catalogue](https://docs.peppol.eu/edel
 
 The direct AS4 adapter currently creates a Peppol-profiled multipart diagnostic envelope using
 phase4's profile constants. It does **not yet** sign or encrypt AS4 messages, so the bundled AS4
-scenarios are transport/wire checks—not cryptographic conformance claims. Ephemeral PKI, signed AS4,
-DNS fault injection, complete phoss SMP provisioning, and certified phoss AP flows belong to the next
-stage described in [RFC-0001](docs/RFC-0001.md).
+scenarios are transport/wire checks—not cryptographic conformance claims. Signed AS4, complete phoss
+SMP provisioning, and certified phoss AP flows remain upcoming work described in
+[RFC-0001](docs/RFC-0001.md).
+
+## Stage two in progress
+
+The first stage-two slice adds a real loopback authoritative DNS service with NAPTR/A answers,
+NXDOMAIN, SERVFAIL, delay, and timeout injection. Every fixture-backed run also creates a private
+temporary CA and sender/receiver PKCS#12 identities. Private keys are deleted during cleanup;
+retained evidence contains public certificates and SHA-256 fingerprints only.
+
+The next slice will use these identities to replace the diagnostic AS4 envelope with phase4-signed
+and encrypted messages and verified receipts. See the [worldwide testing landscape](docs/landscape.md)
+for how this lightweight workflow complements GITB and the official OpenPeppol Testbed.
 
 ## Build and run
 
@@ -46,6 +57,7 @@ The built-in run starts isolated loopback fixtures on random ports and writes:
 
 - `reports/results.json`
 - `reports/junit.xml`
+- `reports/pki/certificates.json` and public PEM certificates
 
 Generate editable starter files:
 

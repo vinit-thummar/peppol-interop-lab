@@ -17,11 +17,14 @@ class PeppolLabTest {
   }
 
   @Test
-  void bundledPreflightRunsAndWritesBothReports() {
+  void bundledPreflightRunsAndWritesBothReports() throws Exception {
     Path output = temporary.resolve("evidence");
     assertThat(new CommandLine(new PeppolLab()).execute("run", "--output", output.toString())).isZero();
     assertThat(output.resolve("results.json")).isRegularFile();
     assertThat(output.resolve("junit.xml")).isRegularFile();
+    assertThat(output.resolve("pki/certificates.json")).isRegularFile();
+    assertThat(Files.readString(output.resolve("results.json")))
+        .contains("dns-naptr-success", "dns-nxdomain", "dns-servfail", "dns-controlled-timeout");
   }
 
   @Test
