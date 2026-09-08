@@ -1,0 +1,10 @@
+targets:
+  phoss-smp:
+    adapter: standard-smp
+    baseUrl: http://127.0.0.1:8080
+  phoss-ap:
+    adapter: phoss
+    baseUrl: http://127.0.0.1:8090
+    options:
+      authHeader: X-Token
+      authValue: env:PHOSS_AP_TOKEN

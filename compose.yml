@@ -1,0 +1,12 @@
+services:
+  peppol-lab:
+    build: .
+    command: ["run", "--output", "/work/reports"]
+    volumes:
+      - ./reports:/work/reports
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true

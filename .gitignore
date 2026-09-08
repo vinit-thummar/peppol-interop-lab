@@ -1,0 +1,12 @@
+target/
+**/target/
+.idea/
+*.iml
+.DS_Store
+.env
+reports/
+*.p12
+*.pfx
+*.jks
+*.pem
+*.key

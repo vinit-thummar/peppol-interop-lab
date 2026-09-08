@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+**/target
+reports
+*.p12
+*.pfx
+*.jks
+*.pem
+*.key

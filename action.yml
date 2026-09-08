@@ -1,0 +1,38 @@
+name: Peppol Interop Lab
+description: Run vendor-neutral Peppol interoperability preflight scenarios
+inputs:
+  version:
+    description: Container version to execute
+    required: false
+    default: latest
+  config:
+    description: Optional configuration path within the workspace
+    required: false
+  scenarios:
+    description: Optional space-separated scenario paths
+    required: false
+  network:
+    description: Docker network used by the runner; keep none for bundled fixtures
+    required: false
+    default: none
+outputs:
+  report-directory:
+    description: Directory containing JSON and JUnit reports
+    value: ${{ steps.run.outputs.report-directory }}
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      env:
+        LAB_VERSION: ${{ inputs.version }}
+        LAB_CONFIG: ${{ inputs.config }}
+        LAB_SCENARIOS: ${{ inputs.scenarios }}
+        LAB_NETWORK: ${{ inputs.network }}
+      run: |
+        set -euo pipefail
+        args=(run --output /work/reports)
+        if [[ -n "$LAB_CONFIG" ]]; then args+=(--config "/work/$LAB_CONFIG"); fi
+        if [[ -n "$LAB_SCENARIOS" ]]; then read -r -a scenario_args <<< "$LAB_SCENARIOS"; args+=("${scenario_args[@]}"); fi
+        docker run --rm --network "$LAB_NETWORK" -v "$GITHUB_WORKSPACE:/work" "ghcr.io/vinit-thummar/peppol-interop-lab:$LAB_VERSION" "${args[@]}"
+        echo "report-directory=reports" >> "$GITHUB_OUTPUT"

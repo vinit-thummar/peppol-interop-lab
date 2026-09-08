@@ -1,0 +1,17 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: smp-unknown-participant
+  description: Reports an unknown participant without a false success
+  tags: [smp, negative]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [SMP_LOOKUP]
+steps:
+  - id: lookup-unknown
+    target: smp-fixture
+    action: smp.get
+    with: { path: "/iso6523-actorid-upis::9915:unknown" }
+    expect:
+      status: 404
+      outcome: HTTP_ERROR
+      contains: [participant not found]

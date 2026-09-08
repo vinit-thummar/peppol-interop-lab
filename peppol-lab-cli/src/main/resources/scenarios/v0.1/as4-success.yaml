@@ -1,0 +1,23 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: as4-wire-success
+  description: Sends a Peppol-profiled multipart AS4 diagnostic message and receives a receipt
+  tags: [as4, positive, wire]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [AS4_SEND]
+steps:
+  - id: transmit
+    target: as4-fixture
+    action: as4.send
+    with:
+      path: /as4/accept
+      messageId: success-001@interop-lab
+      sender: POP000001
+      receiver: POP000002
+      documentType: urn:oasis:names:specification:ubl:schema:xsd:Invoice-2
+      process: urn:fdc:peppol.eu:2017:poacc:billing:01:1.0
+    expect:
+      status: 200
+      outcome: SUCCESS
+      contains: [SignalMessage, Receipt]
