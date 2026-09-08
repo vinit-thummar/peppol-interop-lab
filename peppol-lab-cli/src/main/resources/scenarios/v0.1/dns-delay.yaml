@@ -1,0 +1,17 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: dns-controlled-delay
+  description: Resolves successfully when an injected DNS delay remains inside the deadline
+  tags: [dns, resilience, delay]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [DNS_LOOKUP, FAULT_INJECTION]
+steps:
+  - id: resolve-delayed-domain
+    target: dns-fixture
+    action: dns.lookup
+    with: { name: "delay.sml.test", type: A, timeoutMs: 1000 }
+    expect:
+      outcome: SUCCESS
+      contains: ["127.0.0.1"]
+      maxDurationMs: 900

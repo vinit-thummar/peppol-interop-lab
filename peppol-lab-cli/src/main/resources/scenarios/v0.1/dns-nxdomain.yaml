@@ -1,0 +1,17 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: dns-nxdomain
+  description: Distinguishes an unknown participant domain from infrastructure failure
+  tags: [dns, negative, resilience]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [DNS_LOOKUP, FAULT_INJECTION]
+steps:
+  - id: resolve-unknown-domain
+    target: dns-fixture
+    action: dns.lookup
+    with: { name: "nxdomain.sml.test", type: NAPTR }
+    expect:
+      outcome: NXDOMAIN
+      headers: { DNS-Rcode: NXDOMAIN }
+      maxDurationMs: 1000

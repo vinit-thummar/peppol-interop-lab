@@ -2,6 +2,7 @@ package io.github.vinitthummar.peppollab.api;
 
 /** Capabilities advertised by a target adapter. */
 public enum Capability {
+  DNS_LOOKUP,
   SMP_LOOKUP,
   SMP_PROVISION,
   AS4_SEND,

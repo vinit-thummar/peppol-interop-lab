@@ -5,39 +5,86 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.security.GeneralSecurityException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Deterministic loopback-only fixtures used by the bundled preflight scenarios. */
 public final class EmbeddedLab implements AutoCloseable {
   private final HttpServer smp;
   private final HttpServer as4;
+  private final DnsFixture dns;
+  private final EphemeralPki pki;
+  private final ExecutorService smpExecutor;
+  private final ExecutorService as4Executor;
   private final Set<String> messageIds = ConcurrentHashMap.newKeySet();
 
-  private EmbeddedLab(HttpServer smp, HttpServer as4) {
+  private EmbeddedLab(
+      HttpServer smp,
+      HttpServer as4,
+      DnsFixture dns,
+      EphemeralPki pki,
+      ExecutorService smpExecutor,
+      ExecutorService as4Executor) {
     this.smp = smp;
     this.as4 = as4;
+    this.dns = dns;
+    this.pki = pki;
+    this.smpExecutor = smpExecutor;
+    this.as4Executor = as4Executor;
   }
 
-  public static EmbeddedLab start() throws IOException {
+  public static EmbeddedLab start() throws IOException, GeneralSecurityException {
     HttpServer smp = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     HttpServer as4 = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-    EmbeddedLab lab = new EmbeddedLab(smp, as4);
-    smp.createContext("/", lab::handleSmp);
-    as4.createContext("/", lab::handleAs4);
-    smp.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
-    as4.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
-    smp.start();
-    as4.start();
-    return lab;
+    ExecutorService smpExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    ExecutorService as4Executor = Executors.newVirtualThreadPerTaskExecutor();
+    DnsFixture dns = null;
+    EphemeralPki pki = null;
+    try {
+      dns = DnsFixture.start(java.net.URI.create("http://127.0.0.1:" + smp.getAddress().getPort()));
+      pki = EphemeralPki.create();
+      EmbeddedLab lab = new EmbeddedLab(smp, as4, dns, pki, smpExecutor, as4Executor);
+      smp.createContext("/", lab::handleSmp);
+      as4.createContext("/", lab::handleAs4);
+      smp.setExecutor(smpExecutor);
+      as4.setExecutor(as4Executor);
+      smp.start();
+      as4.start();
+      return lab;
+    } catch (IOException | GeneralSecurityException | RuntimeException ex) {
+      smp.stop(0);
+      as4.stop(0);
+      if (dns != null) dns.close();
+      if (pki != null) {
+        try {
+          pki.close();
+        } catch (IOException ignored) {
+          // Preserve the original startup failure.
+        }
+      }
+      smpExecutor.shutdownNow();
+      as4Executor.shutdownNow();
+      throw ex;
+    }
   }
 
   public Map<String, String> runtimeValues() {
-    return Map.of(
-        "fixture:smp", "http://127.0.0.1:" + smp.getAddress().getPort(),
-        "fixture:as4", "http://127.0.0.1:" + as4.getAddress().getPort());
+    Map<String, String> values = new HashMap<>();
+    values.put("fixture:smp", "http://127.0.0.1:" + smp.getAddress().getPort());
+    values.put("fixture:as4", "http://127.0.0.1:" + as4.getAddress().getPort());
+    values.put("fixture:dns", dns.endpoint().toString());
+    values.putAll(pki.runtimeValues());
+    return Map.copyOf(values);
+  }
+
+  public void writePublicEvidence(Path outputDirectory) throws IOException, GeneralSecurityException {
+    pki.writePublicEvidence(outputDirectory);
   }
 
   private void handleSmp(HttpExchange exchange) throws IOException {
@@ -146,8 +193,12 @@ public final class EmbeddedLab implements AutoCloseable {
   }
 
   @Override
-  public void close() {
+  public void close() throws IOException {
     smp.stop(0);
     as4.stop(0);
+    dns.close();
+    smpExecutor.shutdownNow();
+    as4Executor.shutdownNow();
+    pki.close();
   }
 }

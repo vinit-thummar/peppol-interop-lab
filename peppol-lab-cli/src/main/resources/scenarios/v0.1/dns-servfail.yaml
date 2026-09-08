@@ -1,0 +1,17 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: dns-servfail
+  description: Preserves an authoritative resolver failure as a distinct discovery outcome
+  tags: [dns, negative, resilience]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [DNS_LOOKUP, FAULT_INJECTION]
+steps:
+  - id: resolve-failing-domain
+    target: dns-fixture
+    action: dns.lookup
+    with: { name: "servfail.sml.test", type: NAPTR }
+    expect:
+      outcome: SERVFAIL
+      headers: { DNS-Rcode: SERVFAIL }
+      maxDurationMs: 1000

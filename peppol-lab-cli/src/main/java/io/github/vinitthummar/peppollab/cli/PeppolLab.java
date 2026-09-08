@@ -92,10 +92,11 @@ public final class PeppolLab implements Runnable {
       System.out.println(mark(javaOk) + " Java " + javaFeature + (javaOk ? "" : " (Java 21+ required)"));
       boolean docker = commandOk("docker", "info");
       System.out.println(mark(docker) + " Docker" + (docker ? "" : " (required for external container targets)"));
-      try (AdapterRegistry registry = AdapterRegistry.load(); EmbeddedLab ignored = EmbeddedLab.start()) {
+      try (AdapterRegistry registry = AdapterRegistry.load(); EmbeddedLab lab = EmbeddedLab.start()) {
         System.out.println(mark(!registry.all().isEmpty()) + " adapters: "
             + registry.all().stream().map(TargetAdapter::id).sorted().toList());
-        System.out.println("OK  loopback fixtures");
+        System.out.println("OK  loopback HTTP and DNS fixtures: " + lab.runtimeValues().get("fixture:dns"));
+        System.out.println("OK  per-run ephemeral PKI");
       } catch (Exception ex) {
         System.err.println("ERR fixtures/adapters: " + ex.getMessage());
         return 3;
@@ -132,6 +133,7 @@ public final class PeppolLab implements Runnable {
         try (EmbeddedLab lab = noFixtures ? null : EmbeddedLab.start();
              AdapterRegistry registry = AdapterRegistry.load()) {
           Map<String, String> runtime = lab == null ? Map.of() : lab.runtimeValues();
+          if (lab != null) lab.writePublicEvidence(output);
           AdapterContext context = new AdapterContext(output, allowProduction, runtime);
           RunReport report = new ScenarioEngine(config, registry, context).run(scenarios);
           print(report);
@@ -162,7 +164,8 @@ public final class PeppolLab implements Runnable {
   private static LabConfig defaultConfig() {
     return new LabConfig(Map.of(
         "smp-fixture", new TargetConfig("standard-smp", URI.create("fixture:smp"), Map.of()),
-        "as4-fixture", new TargetConfig("direct-as4", URI.create("fixture:as4"), Map.of())));
+        "as4-fixture", new TargetConfig("direct-as4", URI.create("fixture:as4"), Map.of()),
+        "dns-fixture", new TargetConfig("dns", URI.create("fixture:dns"), Map.of())));
   }
 
   private static final class InvalidScenario extends RuntimeException {
@@ -177,6 +180,9 @@ public final class PeppolLab implements Runnable {
         as4-fixture:
           adapter: direct-as4
           baseUrl: fixture:as4
+        dns-fixture:
+          adapter: dns
+          baseUrl: fixture:dns
       """;
 
   static final String SCENARIO_TEMPLATE = """
