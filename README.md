@@ -38,9 +38,12 @@ NXDOMAIN, SERVFAIL, delay, and timeout injection. Every fixture-backed run also 
 temporary CA and sender/receiver PKCS#12 identities. Private keys are deleted during cleanup;
 retained evidence contains public certificates and SHA-256 fingerprints only.
 
-The next slice will use these identities to replace the diagnostic AS4 envelope with phase4-signed
-and encrypted messages and verified receipts. See the [worldwide testing landscape](docs/landscape.md)
-for how this lightweight workflow complements GITB and the official OpenPeppol Testbed.
+The generated identities are now verified against phase4's in-memory WSS4J crypto implementation.
+The bridge loads both sender and receiver PKCS#12 identities, installs the per-run CA as the explicit
+trust anchor, and erases its owned password when closed. The next slice will use that bridge to
+replace the diagnostic AS4 envelope with signed and encrypted messages and verified receipts. See
+the [worldwide testing landscape](docs/landscape.md) for how this lightweight workflow complements
+GITB and the official OpenPeppol Testbed.
 
 ## Build and run
 
