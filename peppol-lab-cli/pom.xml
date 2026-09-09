@@ -69,8 +69,33 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <mainClass>io.github.vinitthummar.peppollab.cli.PeppolLab</mainClass>
+                  <manifestEntries>
+                    <Multi-Release>true</Multi-Release>
+                  </manifestEntries>
                 </transformer>
               </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.6.2</version>
+        <executions>
+          <execution>
+            <id>smoke-test-runnable-jar</id>
+            <phase>verify</phase>
+            <goals><goal>exec</goal></goals>
+            <configuration>
+              <executable>${java.home}/bin/java</executable>
+              <arguments>
+                <argument>-jar</argument>
+                <argument>${project.build.directory}/peppol-lab.jar</argument>
+                <argument>run</argument>
+                <argument>--output</argument>
+                <argument>${project.build.directory}/smoke-report</argument>
+              </arguments>
             </configuration>
           </execution>
         </executions>

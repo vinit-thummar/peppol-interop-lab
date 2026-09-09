@@ -14,22 +14,22 @@ The initial specification baseline is:
 
 See the [official eDelivery specification catalogue](https://docs.peppol.eu/edelivery/).
 
-## Stage-one capabilities
+## Current capabilities
 
 - Versioned YAML scenario contract and machine-readable JSON Schema.
 - `init`, `doctor`, `validate`, `list`, and `run` CLI commands.
 - Public Java adapter SPI discovered through `ServiceLoader`.
-- Standard SMP HTTP, direct AS4 wire, and phoss control-plane adapters.
-- Loopback-only deterministic SMP and AS4 HTTP fixtures.
+- Standard SMP HTTP, direct phase4 AS4, and phoss control-plane adapters.
+- Loopback-only deterministic SMP, DNS, and phase4 AS4 fixtures.
 - Positive, negative, HTTP failure, and timeout starter scenarios.
 - Console, JSON, and JUnit XML results with stable exit codes.
 - Production-domain guard and environment/file-only secret references.
 
-The direct AS4 adapter currently creates a Peppol-profiled multipart diagnostic envelope using
-phase4's profile constants. It does **not yet** sign or encrypt AS4 messages, so the bundled AS4
-scenarios are transport/wire checks—not cryptographic conformance claims. Signed AS4, complete phoss
-SMP provisioning, and certified phoss AP flows remain upcoming work described in
-[RFC-0001](docs/RFC-0001.md).
+The direct AS4 adapter uses phase4 to sign and encrypt Peppol-profiled user messages. Its loopback
+peer decrypts and verifies the message, records the recovered payload, and returns a signed receipt.
+The sender rejects receipts whose cryptographic references are invalid or whose `RefToMessageId`
+does not match the transmitted message. These are deterministic preflight contracts, not a claim of
+OpenPeppol conformance or accreditation.
 
 ## Stage two in progress
 
@@ -38,12 +38,13 @@ NXDOMAIN, SERVFAIL, delay, and timeout injection. Every fixture-backed run also 
 temporary CA and sender/receiver PKCS#12 identities. Private keys are deleted during cleanup;
 retained evidence contains public certificates and SHA-256 fingerprints only.
 
-The generated identities are now verified against phase4's in-memory WSS4J crypto implementation.
-The bridge loads both sender and receiver PKCS#12 identities, installs the per-run CA as the explicit
-trust anchor, and erases its owned password when closed. The next slice will use that bridge to
-replace the diagnostic AS4 envelope with signed and encrypted messages and verified receipts. See
-the [worldwide testing landscape](docs/landscape.md) for how this lightweight workflow complements
-GITB and the official OpenPeppol Testbed.
+The generated identities are used by phase4's in-memory WSS4J crypto implementation. The bridge
+loads sender and receiver PKCS#12 identities, installs the per-run CA as the explicit trust anchor,
+and erases its owned password when closed. The current AS4 slice performs a complete signed,
+encrypted loopback exchange with strict receipt verification. Payload-integrity mutation,
+certificate-rejection, and duplicate-message scenarios remain in the next stage-two slices. See the
+[worldwide testing landscape](docs/landscape.md) for how this lightweight workflow complements GITB
+and the official OpenPeppol Testbed.
 
 ## Build and run
 
@@ -89,6 +90,15 @@ targets:
   local-smp:
     adapter: standard-smp
     baseUrl: http://127.0.0.1:8080
+  direct-as4:
+    adapter: direct-as4
+    baseUrl: http://127.0.0.1:8081
+    options:
+      senderKeyStore: file:/mounted/sender.p12
+      senderKeyPassword: env:AS4_KEY_PASSWORD
+      senderKeyAlias: sender
+      trustCertificate: file:/mounted/ca.pem
+      receiverCertificate: file:/mounted/receiver.pem
   phoss-ap:
     adapter: phoss
     baseUrl: http://127.0.0.1:8090

@@ -22,6 +22,11 @@ class EphemeralPkiTest {
       password = pki.password();
       assertThat(pki.senderKeyStorePath()).isRegularFile();
       assertThat(pki.receiverKeyStorePath()).isRegularFile();
+      assertThat(pki.senderCertificatePath()).isRegularFile();
+      assertThat(pki.receiverCertificatePath()).isRegularFile();
+      assertThat(pki.runtimeValues().get("fixture:pki-password")).startsWith("file:");
+      assertThat(Path.of(java.net.URI.create(
+          pki.runtimeValues().get("fixture:pki-password")))).isRegularFile();
 
       KeyStore store = KeyStore.getInstance("PKCS12");
       try (var input = Files.newInputStream(pki.senderKeyStorePath())) {
