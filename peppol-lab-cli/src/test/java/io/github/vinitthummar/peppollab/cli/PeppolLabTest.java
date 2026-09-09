@@ -23,8 +23,18 @@ class PeppolLabTest {
     assertThat(output.resolve("results.json")).isRegularFile();
     assertThat(output.resolve("junit.xml")).isRegularFile();
     assertThat(output.resolve("pki/certificates.json")).isRegularFile();
-    assertThat(Files.readString(output.resolve("results.json")))
-        .contains("dns-naptr-success", "dns-nxdomain", "dns-servfail", "dns-controlled-timeout");
+    String results = Files.readString(output.resolve("results.json"));
+    assertThat(results)
+        .contains(
+            "as4-signed-encrypted-success",
+            "\"signed\" : true",
+            "\"encrypted\" : true",
+            "\"receiptReferencesVerified\" : true",
+            "dns-naptr-success",
+            "dns-nxdomain",
+            "dns-servfail",
+            "dns-controlled-timeout")
+        .doesNotContain("pki-password", ".p12", "PRIVATE KEY");
   }
 
   @Test

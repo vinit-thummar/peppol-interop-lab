@@ -49,8 +49,11 @@ public final class EphemeralPki implements AutoCloseable {
 
   private final Path directory;
   private final Path caCertificatePath;
+  private final Path senderCertificatePath;
+  private final Path receiverCertificatePath;
   private final Path senderKeyStorePath;
   private final Path receiverKeyStorePath;
+  private final Path passwordPath;
   private final char[] password;
   private final X509Certificate caCertificate;
   private final X509Certificate senderCertificate;
@@ -59,16 +62,22 @@ public final class EphemeralPki implements AutoCloseable {
   private EphemeralPki(
       Path directory,
       Path caCertificatePath,
+      Path senderCertificatePath,
+      Path receiverCertificatePath,
       Path senderKeyStorePath,
       Path receiverKeyStorePath,
+      Path passwordPath,
       char[] password,
       X509Certificate caCertificate,
       X509Certificate senderCertificate,
       X509Certificate receiverCertificate) {
     this.directory = directory;
     this.caCertificatePath = caCertificatePath;
+    this.senderCertificatePath = senderCertificatePath;
+    this.receiverCertificatePath = receiverCertificatePath;
     this.senderKeyStorePath = senderKeyStorePath;
     this.receiverKeyStorePath = receiverKeyStorePath;
+    this.passwordPath = passwordPath;
     this.password = password;
     this.caCertificate = caCertificate;
     this.senderCertificate = senderCertificate;
@@ -88,15 +97,37 @@ public final class EphemeralPki implements AutoCloseable {
       char[] password = randomPassword();
 
       Path caPath = directory.resolve("ca.pem");
+      Path senderCertificatePath = directory.resolve("sender.pem");
+      Path receiverCertificatePath = directory.resolve("receiver.pem");
       Path senderPath = directory.resolve("sender.p12");
       Path receiverPath = directory.resolve("receiver.p12");
+      Path passwordPath = directory.resolve("password.txt");
       Files.writeString(caPath, pem(ca), StandardCharsets.US_ASCII);
+      Files.writeString(senderCertificatePath, pem(sender), StandardCharsets.US_ASCII);
+      Files.writeString(receiverCertificatePath, pem(receiver), StandardCharsets.US_ASCII);
       writeKeyStore(senderPath, "sender", senderKeys, sender, ca, password);
       writeKeyStore(receiverPath, "receiver", receiverKeys, receiver, ca, password);
+      try (var writer = Files.newBufferedWriter(passwordPath, StandardCharsets.UTF_8)) {
+        writer.write(password);
+      }
       restrict(caPath, false);
+      restrict(senderCertificatePath, false);
+      restrict(receiverCertificatePath, false);
       restrict(senderPath, false);
       restrict(receiverPath, false);
-      return new EphemeralPki(directory, caPath, senderPath, receiverPath, password, ca, sender, receiver);
+      restrict(passwordPath, false);
+      return new EphemeralPki(
+          directory,
+          caPath,
+          senderCertificatePath,
+          receiverCertificatePath,
+          senderPath,
+          receiverPath,
+          passwordPath,
+          password,
+          ca,
+          sender,
+          receiver);
     } catch (IOException | GeneralSecurityException | RuntimeException ex) {
       deleteTree(directory);
       throw ex;
@@ -113,6 +144,14 @@ public final class EphemeralPki implements AutoCloseable {
 
   public Path receiverKeyStorePath() {
     return receiverKeyStorePath;
+  }
+
+  public Path senderCertificatePath() {
+    return senderCertificatePath;
+  }
+
+  public Path receiverCertificatePath() {
+    return receiverCertificatePath;
   }
 
   public char[] password() {
@@ -134,8 +173,11 @@ public final class EphemeralPki implements AutoCloseable {
   public Map<String, String> runtimeValues() {
     return Map.of(
         "fixture:pki-ca", caCertificatePath.toUri().toString(),
+        "fixture:pki-sender-cert", senderCertificatePath.toUri().toString(),
+        "fixture:pki-receiver-cert", receiverCertificatePath.toUri().toString(),
         "fixture:pki-sender", senderKeyStorePath.toUri().toString(),
-        "fixture:pki-receiver", receiverKeyStorePath.toUri().toString());
+        "fixture:pki-receiver", receiverKeyStorePath.toUri().toString(),
+        "fixture:pki-password", passwordPath.toUri().toString());
   }
 
   /** Writes only public certificates and fingerprints; private keys and passwords never leave temp storage. */

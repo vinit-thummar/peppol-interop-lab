@@ -1,9 +1,9 @@
 apiVersion: peppol-interop-lab/v1alpha1
 kind: Scenario
 metadata:
-  name: as4-wire-success
-  description: Sends a Peppol-profiled multipart AS4 diagnostic message and receives a receipt
-  tags: [as4, positive, wire]
+  name: as4-signed-encrypted-success
+  description: Sends a signed and encrypted Peppol AS4 message and strictly verifies its signed receipt
+  tags: [as4, positive, cryptographic]
 specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
 requires: [AS4_SEND]
 steps:
