@@ -1,0 +1,26 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: as4-duplicate-message-id
+  description: Rejects a second AS4 transmission that reuses an accepted MessageId
+  tags: [as4, negative, reception-awareness]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [AS4_SEND]
+steps:
+  - id: accept-original
+    target: as4-fixture
+    action: as4.send
+    with:
+      messageId: duplicate-001@interop-lab
+      payload: '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"><ID>first</ID></Invoice>'
+    expect:
+      outcome: SUCCESS
+  - id: reject-duplicate
+    target: as4-fixture
+    action: as4.send
+    with:
+      messageId: duplicate-001@interop-lab
+      payload: '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"><ID>second</ID></Invoice>'
+    expect:
+      outcome: AS4_ERROR
+      contains: ["EBMS:4001", duplicate]
