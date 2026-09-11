@@ -239,8 +239,11 @@ public final class DirectAs4Adapter implements TargetAdapter {
   private static String setting(
       TargetConfig target, AdapterContext context, String optionName, String fixtureName)
       throws AdapterException {
-    String value = target.options().get(optionName);
-    if (value == null) value = context.runtimeValues().get(fixtureName);
+    String reference = target.options().getOrDefault(optionName, fixtureName);
+    String value = context.runtimeValues().getOrDefault(reference, reference);
+    if (reference.startsWith("fixture:") && reference.equals(value)) {
+      throw new AdapterException("AS4 fixture value is unavailable: " + reference, true);
+    }
     if (value == null || value.isBlank()) {
       throw new AdapterException("Missing direct AS4 setting '" + optionName + "'", true);
     }

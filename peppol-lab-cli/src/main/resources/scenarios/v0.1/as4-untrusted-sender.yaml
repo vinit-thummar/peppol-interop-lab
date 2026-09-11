@@ -1,0 +1,18 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: as4-untrusted-sender-rejection
+  description: Rejects an AS4 sender certificate issued by an unknown certificate authority
+  tags: [as4, negative, cryptographic, certificate]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [AS4_SEND]
+steps:
+  - id: reject-untrusted-sender
+    target: as4-untrusted-sender-fixture
+    action: as4.send
+    with:
+      messageId: untrusted-sender-001@interop-lab
+      payload: '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"><ID>must-not-be-delivered</ID></Invoice>'
+    expect:
+      outcome: AS4_ERROR
+      contains: ["EBMS:0102", "certificate path validation", "signature check failed"]
