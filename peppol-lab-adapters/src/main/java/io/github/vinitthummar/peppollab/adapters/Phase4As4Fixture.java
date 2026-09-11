@@ -6,6 +6,7 @@ import com.helger.collection.commons.CommonsArrayList;
 import com.helger.collection.commons.ICommonsList;
 import com.helger.http.header.HttpHeaderMap;
 import com.helger.mime.IMimeType;
+import com.helger.mime.parse.MimeTypeParser;
 import com.helger.phase4.attachment.IAS4IncomingAttachmentFactory;
 import com.helger.phase4.attachment.WSS4JAttachment;
 import com.helger.phase4.ebms3header.Ebms3SignalMessage;
@@ -30,6 +31,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.github.vinitthummar.peppollab.core.As4Fixture;
 import io.github.vinitthummar.peppollab.core.EphemeralPki;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -110,6 +112,14 @@ final class Phase4As4Fixture implements As4Fixture {
     exchange.getRequestHeaders().forEach(
         (name, values) -> values.forEach(value -> headers.addHeader(name, value)));
     JdkResponse response = new JdkResponse(exchange);
+    InputStream requestBody = exchange.getRequestBody();
+    if (query != null && query.contains("mode=tamper-payload")) {
+      try (InputStream originalRequestBody = requestBody) {
+        requestBody = new ByteArrayInputStream(tamperEncryptedPayload(
+            originalRequestBody.readAllBytes(),
+            exchange.getRequestHeaders().getFirst("Content-Type")));
+      }
+    }
 
     try (WebScoped ignored = new WebScoped();
          AS4RequestHandler handler =
@@ -126,11 +136,73 @@ final class Phase4As4Fixture implements As4Fixture {
       handler.setIncomingReceiverConfiguration(new AS4IncomingReceiverConfiguration());
       handler.setProcessorSupplier(
           () -> new CommonsArrayList<IAS4IncomingMessageProcessorSPI>(processor()));
-      handler.handleRequest(exchange.getRequestBody(), headers, response);
+      handler.handleRequest(requestBody, headers, response);
       response.write();
     } catch (Exception ex) {
       respond(exchange, 500, "text/plain", "phase4 fixture processing failed");
     }
+  }
+
+  private static byte[] tamperEncryptedPayload(byte[] message, String contentType)
+      throws IOException {
+    IMimeType mimeType = MimeTypeParser.safeParseMimeType(contentType);
+    String boundary = mimeType == null ? null : mimeType.getParameterValueWithName("boundary");
+    if (boundary == null || boundary.isBlank()) {
+      throw new IOException("Cannot inject payload mutation without a MIME boundary");
+    }
+
+    byte[] partBoundary = ("\r\n--" + boundary).getBytes(StandardCharsets.ISO_8859_1);
+    byte[] headerSeparator = "\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1);
+    int attachmentBoundary = -1;
+    int headersEnd = -1;
+    String attachmentHeaders = null;
+    int searchFrom = 0;
+    while (true) {
+      int candidateBoundary = indexOf(message, partBoundary, searchFrom);
+      if (candidateBoundary < 0) break;
+      int candidateHeadersEnd =
+          indexOf(message, headerSeparator, candidateBoundary + partBoundary.length);
+      if (candidateHeadersEnd < 0) break;
+      String candidateHeaders = new String(
+          message,
+          candidateBoundary + partBoundary.length,
+          candidateHeadersEnd - candidateBoundary - partBoundary.length,
+          StandardCharsets.ISO_8859_1);
+      if (candidateHeaders.toLowerCase(Locale.ROOT).contains("content-id:")) {
+        attachmentBoundary = candidateBoundary;
+        headersEnd = candidateHeadersEnd;
+        attachmentHeaders = candidateHeaders;
+        break;
+      }
+      searchFrom = candidateHeadersEnd + headerSeparator.length;
+    }
+    if (attachmentBoundary < 0) {
+      throw new IOException("Cannot locate the encrypted MIME attachment boundary");
+    }
+    int payloadStart = headersEnd + headerSeparator.length;
+    int payloadEnd = indexOf(message, partBoundary, payloadStart);
+    if (payloadEnd <= payloadStart) {
+      throw new IOException("Cannot locate the encrypted MIME attachment payload");
+    }
+
+    if (!attachmentHeaders.toLowerCase(Locale.ROOT)
+        .contains("content-transfer-encoding: binary")) {
+      throw new IOException("Encrypted MIME attachment is not binary encoded");
+    }
+
+    byte[] mutated = message.clone();
+    mutated[payloadStart + (payloadEnd - payloadStart) / 2] ^= 0x01;
+    return mutated;
+  }
+
+  private static int indexOf(byte[] source, byte[] target, int fromIndex) {
+    if (fromIndex < 0) return -1;
+    for (int i = fromIndex; i <= source.length - target.length; i++) {
+      int j = 0;
+      while (j < target.length && source[i + j] == target[j]) j++;
+      if (j == target.length) return i;
+    }
+    return -1;
   }
 
   private IAS4IncomingMessageProcessorSPI processor() {

@@ -115,4 +115,29 @@ class Phase4As4RoundTripTest {
           .isEqualTo(acceptedPayload.getBytes(StandardCharsets.UTF_8));
     }
   }
+
+  @Test
+  void rejectsPayloadMutatedAfterSigningAndEncryption() throws Exception {
+    String messageId = "tampered-payload-001@interop-lab";
+
+    try (EphemeralPki pki = EphemeralPki.create();
+         Phase4As4Fixture fixture = Phase4As4Fixture.start(pki)) {
+      var result = new DirectAs4Adapter().execute(
+          new TargetConfig("direct-as4", fixture.endpoint(), Map.of()),
+          new AdapterRequest(
+              "as4.send",
+              Map.of(
+                  "messageId", messageId,
+                  "path", "/as4/accept?mode=tamper-payload"),
+              Duration.ofSeconds(10)),
+          new AdapterContext(output, false, pki.runtimeValues()));
+
+      assertThat(result.outcome()).isEqualTo("AS4_ERROR");
+      assertThat(result.body()).contains("EBMS:0102", "FailedDecryption");
+      assertThat(result.evidence()).singleElement().satisfies(evidence ->
+          assertThat(evidence.attributes().get("ebmsErrors").toString())
+              .contains("EBMS:0102", "FailedDecryption"));
+      assertThat(fixture.receivedPayload(messageId)).isNull();
+    }
+  }
 }

@@ -13,6 +13,7 @@ final class BuiltinCatalog {
       "/scenarios/v0.1/smp-unknown-participant.yaml",
       "/scenarios/v0.1/as4-success.yaml",
       "/scenarios/v0.1/as4-duplicate-message-id.yaml",
+      "/scenarios/v0.1/as4-payload-integrity.yaml",
       "/scenarios/v0.1/as4-controlled-error.yaml",
       "/scenarios/v0.1/smp-timeout.yaml",
       "/scenarios/v0.1/dns-naptr-success.yaml",
