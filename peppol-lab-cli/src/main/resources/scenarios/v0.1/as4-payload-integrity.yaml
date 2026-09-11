@@ -1,0 +1,19 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: as4-payload-integrity
+  description: Rejects an encrypted AS4 payload altered in transit after message security is applied
+  tags: [as4, negative, cryptographic, integrity]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [AS4_SEND]
+steps:
+  - id: reject-altered-ciphertext
+    target: as4-fixture
+    action: as4.send
+    with:
+      path: /as4/accept?mode=tamper-payload
+      messageId: tampered-payload-001@interop-lab
+      payload: '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"><ID>unaltered-at-source</ID></Invoice>'
+    expect:
+      outcome: AS4_ERROR
+      contains: ["EBMS:0102", FailedDecryption]

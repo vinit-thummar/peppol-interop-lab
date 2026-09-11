@@ -30,8 +30,9 @@ peer decrypts and verifies the message, records the recovered payload, and retur
 The sender rejects receipts whose cryptographic references are invalid or whose `RefToMessageId`
 does not match the transmitted message. The bundled AS4 contracts also verify that a reused
 `MessageId` produces an explicit ebMS duplicate error and cannot replace the originally accepted
-payload. These are deterministic preflight contracts, not a claim of OpenPeppol conformance or
-accreditation.
+payload. A controlled in-transit bit flip after signing and encryption also verifies that altered
+ciphertext is rejected before delivery. These are deterministic preflight contracts, not a claim of
+OpenPeppol conformance or accreditation.
 
 ## Stage two in progress
 
@@ -44,8 +45,8 @@ The generated identities are used by phase4's in-memory WSS4J crypto implementat
 loads sender and receiver PKCS#12 identities, installs the per-run CA as the explicit trust anchor,
 and erases its owned password when closed. The current AS4 slices perform a complete signed,
 encrypted loopback exchange with strict receipt verification, reject untrusted senders, and exercise
-duplicate detection with preserved ebMS error evidence. Payload-integrity mutation and a bundled
-certificate-rejection scenario remain in the next stage-two slices. See the [worldwide testing
+duplicate detection and payload-integrity mutation with preserved ebMS error evidence. A bundled
+certificate-rejection scenario remains in the next stage-two slice. See the [worldwide testing
 landscape](docs/landscape.md) for how this lightweight workflow complements GITB and the official
 OpenPeppol Testbed.
 

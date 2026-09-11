@@ -32,6 +32,8 @@ class PeppolLabTest {
             "\"receiptReferencesVerified\" : true",
             "as4-duplicate-message-id",
             "EBMS:4001",
+            "as4-payload-integrity",
+            "EBMS:0102",
             "dns-naptr-success",
             "dns-nxdomain",
             "dns-servfail",
