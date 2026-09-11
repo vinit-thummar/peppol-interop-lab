@@ -74,4 +74,45 @@ class Phase4As4RoundTripTest {
       assertThat(fixture.receivedPayload(messageId)).isNull();
     }
   }
+
+  @Test
+  void rejectsDuplicateMessageIdWithoutReplacingTheAcceptedPayload() throws Exception {
+    String messageId = "duplicate-001@interop-lab";
+    String acceptedPayload =
+        "<Invoice xmlns=\"urn:oasis:names:specification:ubl:schema:xsd:Invoice-2\"><ID>first</ID></Invoice>";
+    String duplicatePayload =
+        "<Invoice xmlns=\"urn:oasis:names:specification:ubl:schema:xsd:Invoice-2\"><ID>second</ID></Invoice>";
+
+    try (EphemeralPki pki = EphemeralPki.create();
+         Phase4As4Fixture fixture = Phase4As4Fixture.start(pki)) {
+      DirectAs4Adapter adapter = new DirectAs4Adapter();
+      TargetConfig target = new TargetConfig("direct-as4", fixture.endpoint(), Map.of());
+      AdapterContext context = new AdapterContext(output, false, pki.runtimeValues());
+
+      var accepted = adapter.execute(
+          target,
+          new AdapterRequest(
+              "as4.send",
+              Map.of("messageId", messageId, "payload", acceptedPayload),
+              Duration.ofSeconds(10)),
+          context);
+      var duplicate = adapter.execute(
+          target,
+          new AdapterRequest(
+              "as4.send",
+              Map.of("messageId", messageId, "payload", duplicatePayload),
+              Duration.ofSeconds(10)),
+          context);
+
+      assertThat(accepted.outcome()).isEqualTo("SUCCESS");
+      assertThat(duplicate.outcome()).isEqualTo("AS4_ERROR");
+      assertThat(duplicate.body()).contains("EBMS:4001").containsIgnoringCase("duplicate");
+      assertThat(duplicate.evidence()).singleElement().satisfies(evidence ->
+          assertThat(evidence.attributes().get("ebmsErrors").toString())
+              .contains("EBMS:4001")
+              .containsIgnoringCase("duplicate"));
+      assertThat(fixture.receivedPayload(messageId))
+          .isEqualTo(acceptedPayload.getBytes(StandardCharsets.UTF_8));
+    }
+  }
 }

@@ -30,6 +30,8 @@ class PeppolLabTest {
             "\"signed\" : true",
             "\"encrypted\" : true",
             "\"receiptReferencesVerified\" : true",
+            "as4-duplicate-message-id",
+            "EBMS:4001",
             "dns-naptr-success",
             "dns-nxdomain",
             "dns-servfail",

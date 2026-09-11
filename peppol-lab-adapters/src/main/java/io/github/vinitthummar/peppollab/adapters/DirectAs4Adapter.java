@@ -2,6 +2,7 @@ package io.github.vinitthummar.peppollab.adapters;
 
 import com.helger.phase4.CAS4;
 import com.helger.phase4.attachment.AS4OutgoingAttachment;
+import com.helger.phase4.ebms3header.Ebms3Error;
 import com.helger.phase4.ebms3header.Ebms3SignalMessage;
 import com.helger.phase4.model.MessageProperty;
 import com.helger.phase4.model.pmode.PMode;
@@ -203,7 +204,9 @@ public final class DirectAs4Adapter implements TargetAdapter {
       }
     }
 
-    List<String> failures = new ArrayList<>(validation.errors());
+    List<String> ebmsErrors = signalErrors(signal);
+    List<String> failures = new ArrayList<>(ebmsErrors);
+    failures.addAll(validation.errors());
     if (sendingException != null) failures.add(describe(sendingException));
     if (failures.isEmpty()) failures.add("phase4 result: " + sendResult.getID());
     return new AdapterResult(
@@ -215,7 +218,22 @@ public final class DirectAs4Adapter implements TargetAdapter {
         List.of(new Evidence("as4.exchange", Instant.now(), Map.of(
             "messageId", messageId,
             "phase4Result", sendResult.getID(),
+            "ebmsErrors", ebmsErrors,
             "receiptReferencesVerified", false))));
+  }
+
+  private static List<String> signalErrors(Ebms3SignalMessage signal) {
+    if (signal == null) return List.of();
+    return signal.getError().stream().map(DirectAs4Adapter::describe).toList();
+  }
+
+  private static String describe(Ebms3Error error) {
+    List<String> details = new ArrayList<>();
+    if (error.getErrorCode() != null) details.add(error.getErrorCode());
+    if (error.getShortDescription() != null) details.add(error.getShortDescription());
+    if (error.getDescriptionValue() != null) details.add(error.getDescriptionValue());
+    if (error.getErrorDetail() != null) details.add(error.getErrorDetail());
+    return details.isEmpty() ? "Unspecified ebMS error" : String.join(": ", details);
   }
 
   private static String setting(
