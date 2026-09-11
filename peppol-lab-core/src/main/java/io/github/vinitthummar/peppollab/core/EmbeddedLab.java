@@ -19,6 +19,7 @@ public final class EmbeddedLab implements AutoCloseable {
   private final As4Fixture as4;
   private final DnsFixture dns;
   private final EphemeralPki pki;
+  private final EphemeralPki untrustedPki;
   private final ExecutorService smpExecutor;
 
   private EmbeddedLab(
@@ -26,11 +27,13 @@ public final class EmbeddedLab implements AutoCloseable {
       As4Fixture as4,
       DnsFixture dns,
       EphemeralPki pki,
+      EphemeralPki untrustedPki,
       ExecutorService smpExecutor) {
     this.smp = smp;
     this.as4 = as4;
     this.dns = dns;
     this.pki = pki;
+    this.untrustedPki = untrustedPki;
     this.smpExecutor = smpExecutor;
   }
 
@@ -39,12 +42,14 @@ public final class EmbeddedLab implements AutoCloseable {
     ExecutorService smpExecutor = Executors.newVirtualThreadPerTaskExecutor();
     DnsFixture dns = null;
     EphemeralPki pki = null;
+    EphemeralPki untrustedPki = null;
     As4Fixture as4 = null;
     try {
       dns = DnsFixture.start(java.net.URI.create("http://127.0.0.1:" + smp.getAddress().getPort()));
       pki = EphemeralPki.create();
+      untrustedPki = EphemeralPki.create();
       as4 = loadAs4Provider().start(pki);
-      EmbeddedLab lab = new EmbeddedLab(smp, as4, dns, pki, smpExecutor);
+      EmbeddedLab lab = new EmbeddedLab(smp, as4, dns, pki, untrustedPki, smpExecutor);
       smp.createContext("/", lab::handleSmp);
       smp.setExecutor(smpExecutor);
       smp.start();
@@ -62,6 +67,13 @@ public final class EmbeddedLab implements AutoCloseable {
       if (pki != null) {
         try {
           pki.close();
+        } catch (IOException ignored) {
+          // Preserve the original startup failure.
+        }
+      }
+      if (untrustedPki != null) {
+        try {
+          untrustedPki.close();
         } catch (IOException ignored) {
           // Preserve the original startup failure.
         }
@@ -89,11 +101,17 @@ public final class EmbeddedLab implements AutoCloseable {
     values.put("fixture:as4", as4.endpoint().toString());
     values.put("fixture:dns", dns.endpoint().toString());
     values.putAll(pki.runtimeValues());
+    Map<String, String> untrusted = untrustedPki.runtimeValues();
+    values.put("fixture:pki-untrusted-ca", untrusted.get("fixture:pki-ca"));
+    values.put("fixture:pki-untrusted-sender-cert", untrusted.get("fixture:pki-sender-cert"));
+    values.put("fixture:pki-untrusted-sender", untrusted.get("fixture:pki-sender"));
+    values.put("fixture:pki-untrusted-password", untrusted.get("fixture:pki-password"));
     return Map.copyOf(values);
   }
 
   public void writePublicEvidence(Path outputDirectory) throws IOException, GeneralSecurityException {
     pki.writePublicEvidence(outputDirectory);
+    untrustedPki.writePublicEvidenceDirectory(outputDirectory.resolve("pki/untrusted"));
   }
 
   private void handleSmp(HttpExchange exchange) throws IOException {
@@ -188,6 +206,12 @@ public final class EmbeddedLab implements AutoCloseable {
     }
     try {
       pki.close();
+    } catch (IOException ex) {
+      if (failure == null) failure = ex;
+      else failure.addSuppressed(ex);
+    }
+    try {
+      untrustedPki.close();
     } catch (IOException ex) {
       if (failure == null) failure = ex;
       else failure.addSuppressed(ex);

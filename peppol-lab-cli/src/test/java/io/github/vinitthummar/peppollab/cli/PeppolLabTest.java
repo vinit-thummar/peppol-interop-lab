@@ -23,6 +23,7 @@ class PeppolLabTest {
     assertThat(output.resolve("results.json")).isRegularFile();
     assertThat(output.resolve("junit.xml")).isRegularFile();
     assertThat(output.resolve("pki/certificates.json")).isRegularFile();
+    assertThat(output.resolve("pki/untrusted/certificates.json")).isRegularFile();
     String results = Files.readString(output.resolve("results.json"));
     assertThat(results)
         .contains(
@@ -30,6 +31,8 @@ class PeppolLabTest {
             "\"signed\" : true",
             "\"encrypted\" : true",
             "\"receiptReferencesVerified\" : true",
+            "as4-untrusted-sender-rejection",
+            "\"receiptReferencesVerified\" : false",
             "as4-duplicate-message-id",
             "EBMS:4001",
             "as4-payload-integrity",

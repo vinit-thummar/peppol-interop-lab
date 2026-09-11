@@ -68,6 +68,8 @@ class Phase4As4RoundTripTest {
           new AdapterContext(output, false, receiverRuntime));
 
       assertThat(result.outcome()).isEqualTo("AS4_ERROR");
+      assertThat(result.body())
+          .contains("EBMS:0102", "certificate path validation", "signature check failed");
       assertThat(result.evidence()).singleElement().satisfies(evidence ->
           assertThat(evidence.attributes())
               .containsEntry("receiptReferencesVerified", false));

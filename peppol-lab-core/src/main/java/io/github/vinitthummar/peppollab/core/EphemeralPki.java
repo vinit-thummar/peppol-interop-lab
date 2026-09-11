@@ -182,7 +182,11 @@ public final class EphemeralPki implements AutoCloseable {
 
   /** Writes only public certificates and fingerprints; private keys and passwords never leave temp storage. */
   public void writePublicEvidence(Path outputDirectory) throws IOException, GeneralSecurityException {
-    Path evidenceDirectory = outputDirectory.resolve("pki");
+    writePublicEvidenceDirectory(outputDirectory.resolve("pki"));
+  }
+
+  void writePublicEvidenceDirectory(Path evidenceDirectory)
+      throws IOException, GeneralSecurityException {
     Files.createDirectories(evidenceDirectory);
     Files.writeString(evidenceDirectory.resolve("ca.pem"), pem(caCertificate), StandardCharsets.US_ASCII);
     Files.writeString(evidenceDirectory.resolve("sender.pem"), pem(senderCertificate), StandardCharsets.US_ASCII);

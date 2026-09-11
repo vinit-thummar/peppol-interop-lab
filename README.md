@@ -31,10 +31,11 @@ The sender rejects receipts whose cryptographic references are invalid or whose 
 does not match the transmitted message. The bundled AS4 contracts also verify that a reused
 `MessageId` produces an explicit ebMS duplicate error and cannot replace the originally accepted
 payload. A controlled in-transit bit flip after signing and encryption also verifies that altered
-ciphertext is rejected before delivery. These are deterministic preflight contracts, not a claim of
-OpenPeppol conformance or accreditation.
+ciphertext is rejected before delivery, while a separate ephemeral CA proves that an untrusted
+sender certificate cannot reach payload processing. These are deterministic preflight contracts,
+not a claim of OpenPeppol conformance or accreditation.
 
-## Stage two in progress
+## Stage two complete
 
 The first stage-two slice adds a real loopback authoritative DNS service with NAPTR/A answers,
 NXDOMAIN, SERVFAIL, delay, and timeout injection. Every fixture-backed run also creates a private
@@ -45,10 +46,10 @@ The generated identities are used by phase4's in-memory WSS4J crypto implementat
 loads sender and receiver PKCS#12 identities, installs the per-run CA as the explicit trust anchor,
 and erases its owned password when closed. The current AS4 slices perform a complete signed,
 encrypted loopback exchange with strict receipt verification, reject untrusted senders, and exercise
-duplicate detection and payload-integrity mutation with preserved ebMS error evidence. A bundled
-certificate-rejection scenario remains in the next stage-two slice. See the [worldwide testing
-landscape](docs/landscape.md) for how this lightweight workflow complements GITB and the official
-OpenPeppol Testbed.
+duplicate detection and payload-integrity mutation with preserved ebMS error evidence. The bundled
+certificate-rejection scenario uses an independently generated CA and retains only the rejected
+identity's public certificates and fingerprints. See the [worldwide testing landscape](docs/landscape.md)
+for how this lightweight workflow complements GITB and the official OpenPeppol Testbed.
 
 ## Build and run
 
@@ -66,6 +67,7 @@ The built-in run starts isolated loopback fixtures on random ports and writes:
 - `reports/results.json`
 - `reports/junit.xml`
 - `reports/pki/certificates.json` and public PEM certificates
+- `reports/pki/untrusted/certificates.json` and rejected identity public PEM certificates
 
 Generate editable starter files:
 
