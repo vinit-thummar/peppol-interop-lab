@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -75,6 +76,24 @@ public final class ScenarioEngine {
         scenarioStatus = status;
         message = ex.getMessage();
         break;
+      }
+    }
+    for (String targetName : scenario.steps().stream()
+        .map(ScenarioStep::target)
+        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new))) {
+      TargetConfig target = requireTarget(targetName);
+      try {
+        adapters.require(target.adapter()).cleanup(target, context);
+      } catch (AdapterException ex) {
+        String cleanupMessage = "Cleanup failed for target '" + targetName + "': " + ex.getMessage();
+        steps.add(new StepRunResult(
+            "cleanup:" + targetName,
+            ScenarioStatus.ERROR,
+            cleanupMessage,
+            null,
+            List.of(cleanupMessage)));
+        scenarioStatus = ScenarioStatus.ERROR;
+        message = cleanupMessage;
       }
     }
     return result(scenario, scenarioStatus, message, started, steps);
