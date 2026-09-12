@@ -40,7 +40,9 @@ class PhossAdapterTest {
       AdapterRequest request = request("smp.service-group.put");
       PhossAdapter adapter = new PhossAdapter();
 
-      assertThat(adapter.capabilities(target)).contains(Capability.SMP_PROVISION);
+      assertThat(adapter.capabilities(target))
+          .contains(Capability.SMP_PROVISION)
+          .doesNotContain(Capability.AP_SUBMIT, Capability.TRANSACTION_STATUS);
       assertThat(adapter.execute(target, request, context).statusCode()).isEqualTo(200);
       assertThat(adapter.execute(target, request("smp.service-group.get"), context).body())
           .contains("ServiceGroup", "9915:interop-lab-stage3");
@@ -163,6 +165,112 @@ class PhossAdapterTest {
         .hasMessageContaining("--allow-production");
   }
 
+  @Test
+  void submitsRawDocumentToThePhossApContract() throws Exception {
+    AtomicReference<String> stored = new AtomicReference<>();
+    List<CapturedRequest> requests = new CopyOnWriteArrayList<>();
+    try (HttpServerFixture fixture = HttpServerFixture.start(stored, requests)) {
+      Path token = output.resolve("ap-token.txt");
+      Files.writeString(token, "local-test-token", StandardCharsets.UTF_8);
+      Path payload = output.resolve("invoice.xml");
+      Files.writeString(payload, "<Invoice><ID>interop-1</ID></Invoice>", StandardCharsets.UTF_8);
+      PhossAdapter adapter = new PhossAdapter();
+      AdapterRequest request = new AdapterRequest(
+          "phoss.submit",
+          Map.ofEntries(
+              Map.entry("senderId", "iso6523-actorid-upis::9915:sender"),
+              Map.entry("receiverId", "iso6523-actorid-upis::9915:receiver"),
+              Map.entry("documentTypeId", "busdox-docid-qns::urn:test:invoice::1"),
+              Map.entry("processId", "cenbii-procid-ubl::urn:test:billing"),
+              Map.entry("countryCode", "in"),
+              Map.entry("sbdhInstanceID", "interop instance/1"),
+              Map.entry("custom1", "contract-test"),
+              Map.entry("payloadFile", payload.toString())),
+          Duration.ofSeconds(5));
+
+      assertThat(adapter.execute(
+          apTarget(fixture.endpoint(), token), request,
+          new AdapterContext(output, false, Map.of())).statusCode()).isEqualTo(200);
+
+      assertThat(requests).hasSize(1);
+      CapturedRequest captured = requests.getFirst();
+      assertThat(captured.method()).isEqualTo("POST");
+      assertThat(captured.rawPath()).isEqualTo(
+          "/api/outbound/submit/"
+              + "iso6523-actorid-upis%3A%3A9915%3Asender/"
+              + "iso6523-actorid-upis%3A%3A9915%3Areceiver/"
+              + "busdox-docid-qns%3A%3Aurn%3Atest%3Ainvoice%3A%3A1/"
+              + "cenbii-procid-ubl%3A%3Aurn%3Atest%3Abilling/IN");
+      assertThat(captured.rawQuery())
+          .isEqualTo("sbdhInstanceID=interop%20instance%2F1&custom1=contract-test");
+      assertThat(captured.apiToken()).isEqualTo("local-test-token");
+      assertThat(captured.contentType()).isEqualTo("application/xml");
+      assertThat(captured.body()).isEqualTo("<Invoice><ID>interop-1</ID></Invoice>");
+    }
+  }
+
+  @Test
+  void readsArchivedPhossApTransactionStatus() throws Exception {
+    AtomicReference<String> stored = new AtomicReference<>(
+        "{\"sbdhInstanceID\":\"interop/1\",\"status\":\"sent\"}");
+    List<CapturedRequest> requests = new CopyOnWriteArrayList<>();
+    try (HttpServerFixture fixture = HttpServerFixture.start(stored, requests)) {
+      Path token = output.resolve("status-token.txt");
+      Files.writeString(token, "status-token", StandardCharsets.UTF_8);
+      AdapterRequest request = new AdapterRequest(
+          "phoss.status",
+          Map.of("instanceId", "interop/1", "includeArchive", true),
+          Duration.ofSeconds(5));
+
+      var result = new PhossAdapter().execute(
+          apTarget(fixture.endpoint(), token), request,
+          new AdapterContext(output, false, Map.of()));
+
+      assertThat(result.statusCode()).isEqualTo(200);
+      assertThat(result.body()).contains("\"status\":\"sent\"");
+      assertThat(requests.getFirst().rawPath())
+          .isEqualTo("/api/outbound/status/interop%2F1");
+      assertThat(requests.getFirst().rawQuery()).isEqualTo("includeArchive=true");
+      assertThat(requests.getFirst().apiToken()).isEqualTo("status-token");
+    }
+  }
+
+  @Test
+  void rejectsIncompletePhossApSubmissionBeforeNetworkAccess() {
+    PhossAdapter adapter = new PhossAdapter();
+    AdapterRequest request = new AdapterRequest(
+        "phoss.submit", Map.of("payload", "<Invoice/>"), Duration.ofSeconds(1));
+
+    assertThatThrownBy(() -> adapter.execute(
+        new TargetConfig("phoss", URI.create("http://127.0.0.1:9"), Map.of()),
+        request,
+        new AdapterContext(output, false, Map.of())))
+        .isInstanceOf(AdapterException.class)
+        .hasMessageContaining("senderId");
+  }
+
+  @Test
+  void requiresReferencedAuthenticationForPhossApSubmission() {
+    PhossAdapter adapter = new PhossAdapter();
+    AdapterRequest request = new AdapterRequest(
+        "phoss.submit",
+        Map.of(
+            "senderId", "iso6523-actorid-upis::9915:sender",
+            "receiverId", "iso6523-actorid-upis::9915:receiver",
+            "documentTypeId", "busdox-docid-qns::urn:test:invoice::1",
+            "processId", "cenbii-procid-ubl::urn:test:billing",
+            "countryCode", "IN",
+            "payload", "<Invoice/>"),
+        Duration.ofSeconds(1));
+
+    assertThatThrownBy(() -> adapter.execute(
+        new TargetConfig("phoss", URI.create("http://127.0.0.1:9"), Map.of()),
+        request,
+        new AdapterContext(output, false, Map.of())))
+        .isInstanceOf(AdapterException.class)
+        .hasMessageContaining("authentication is required");
+  }
+
   private static TargetConfig target(URI endpoint, Path password) {
     return new TargetConfig(
         "phoss",
@@ -171,6 +279,16 @@ class PhossAdapterTest {
             "publisherApi", "true",
             "username", "interop",
             "password", password.toUri().toString()));
+  }
+
+  private static TargetConfig apTarget(URI endpoint, Path token) {
+    return new TargetConfig(
+        "phoss",
+        endpoint,
+        Map.of(
+            "apApi", "true",
+            "authHeader", "X-Token",
+            "authValue", token.toUri().toString()));
   }
 
   private static AdapterRequest request(String action) {
@@ -198,7 +316,13 @@ class PhossAdapterTest {
   }
 
   private record CapturedRequest(
-      String method, String rawPath, String rawQuery, String authorization, String body) {}
+      String method,
+      String rawPath,
+      String rawQuery,
+      String authorization,
+      String apiToken,
+      String contentType,
+      String body) {}
 
   private static final class HttpServerFixture implements AutoCloseable {
     private final HttpServer server;
@@ -229,11 +353,13 @@ class PhossAdapterTest {
           exchange.getRequestURI().getRawPath(),
           exchange.getRequestURI().getRawQuery(),
           exchange.getRequestHeaders().getFirst("Authorization"),
+          exchange.getRequestHeaders().getFirst("X-Token"),
+          exchange.getRequestHeaders().getFirst("Content-Type"),
           body));
       switch (exchange.getRequestMethod()) {
         case "GET" -> respond(exchange, stored.get() == null ? 404 : 200,
             stored.get() == null ? "<error>not found</error>" : stored.get());
-        case "PUT" -> {
+        case "PUT", "POST" -> {
           stored.set(body);
           respond(exchange, 200, "");
         }

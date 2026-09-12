@@ -12,11 +12,14 @@ import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -36,8 +39,11 @@ public final class PhossAdapter implements TargetAdapter {
   @Override public String id() { return "phoss"; }
 
   @Override public Set<Capability> capabilities(TargetConfig target) {
-    Set<Capability> result = new LinkedHashSet<>(Set.of(
-        Capability.AP_SUBMIT, Capability.TRANSACTION_STATUS, Capability.EVIDENCE));
+    Set<Capability> result = new LinkedHashSet<>(Set.of(Capability.EVIDENCE));
+    if (apApiEnabled(target)) {
+      result.add(Capability.AP_SUBMIT);
+      result.add(Capability.TRANSACTION_STATUS);
+    }
     if (publisherApiEnabled(target)) result.add(Capability.SMP_PROVISION);
     return Set.copyOf(result);
   }
@@ -59,22 +65,68 @@ public final class PhossAdapter implements TargetAdapter {
   }
 
   private AdapterResult submit(TargetConfig target, AdapterRequest request) throws AdapterException {
-    String path = AdapterSupport.parameter(request.parameters(), "path", "/api/outbound/submit");
-    String payload = AdapterSupport.parameter(request.parameters(), "payload", "");
-    HttpRequest.Builder builder = HttpRequest.newBuilder(AdapterSupport.resolve(target, path))
-        .timeout(request.timeout()).header("Content-Type", "application/xml")
-        .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8));
-    authenticate(target, builder, false);
+    requireApApi(target);
+    String senderId = requiredParameter(request, "senderId");
+    String receiverId = requiredParameter(request, "receiverId");
+    String documentTypeId = requiredParameter(request, "documentTypeId");
+    String processId = requiredParameter(request, "processId");
+    String countryCode = requiredParameter(request, "countryCode").toUpperCase(Locale.ROOT);
+    if (!countryCode.matches("[A-Z]{2}")) {
+      throw new AdapterException("Parameter 'countryCode' must be an ISO 3166-1 alpha-2 code", false);
+    }
+
+    URI uri = AdapterSupport.resolve(target,
+        "/api/outbound/submit/" + pathSegment(senderId)
+            + "/" + pathSegment(receiverId)
+            + "/" + pathSegment(documentTypeId)
+            + "/" + pathSegment(processId)
+            + "/" + pathSegment(countryCode));
+    for (String name : List.of(
+        "sbdhInstanceID", "mlsTo", "sbdhStandard", "sbdhTypeVersion", "sbdhType",
+        "payloadMimeType", "custom1", "custom2", "custom3")) {
+      String value = AdapterSupport.parameter(request.parameters(), name, null);
+      if (value != null && !value.isBlank()) uri = query(uri, name, value);
+    }
+
+    byte[] payload = payload(request);
+    String contentType = AdapterSupport.parameter(
+        request.parameters(), "contentType", "application/xml");
+    HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
+        .timeout(request.timeout()).header("Content-Type", contentType)
+        .header("Accept", "application/json")
+        .POST(HttpRequest.BodyPublishers.ofByteArray(payload));
+    authenticate(target, builder, true);
     return AdapterSupport.send(client, builder.build());
   }
 
   private AdapterResult status(TargetConfig target, AdapterRequest request) throws AdapterException {
+    requireApApi(target);
     String instanceId = requiredParameter(request, "instanceId");
-    HttpRequest.Builder builder = HttpRequest.newBuilder(
-        AdapterSupport.resolve(target, "/api/outbound/status/" + pathSegment(instanceId)))
+    URI uri = AdapterSupport.resolve(target, "/api/outbound/status/" + pathSegment(instanceId));
+    if (booleanParameter(request, "includeArchive", false)) {
+      uri = query(uri, "includeArchive", "true");
+    }
+    HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
         .timeout(request.timeout()).GET();
-    authenticate(target, builder, false);
+    authenticate(target, builder, true);
     return AdapterSupport.send(client, builder.build());
+  }
+
+  private static byte[] payload(AdapterRequest request) throws AdapterException {
+    String inline = AdapterSupport.parameter(request.parameters(), "payload", null);
+    String file = AdapterSupport.parameter(request.parameters(), "payloadFile", null);
+    if (inline != null && file != null) {
+      throw new AdapterException("Configure only one of 'payload' or 'payloadFile'", false);
+    }
+    if (inline != null) return inline.getBytes(StandardCharsets.UTF_8);
+    if (file == null || file.isBlank()) {
+      throw new AdapterException("Missing required parameter 'payload' or 'payloadFile'", false);
+    }
+    try {
+      return Files.readAllBytes(Path.of(file));
+    } catch (Exception ex) {
+      throw new AdapterException("Cannot read payload file '" + file + "'", ex, true);
+    }
   }
 
   private AdapterResult putServiceGroup(
@@ -414,8 +466,19 @@ public final class PhossAdapter implements TargetAdapter {
     }
   }
 
+  private static void requireApApi(TargetConfig target) throws AdapterException {
+    if (!apApiEnabled(target)) {
+      throw new AdapterException("phoss AP API is not enabled for this target", false);
+    }
+  }
+
   private static boolean publisherApiEnabled(TargetConfig target) {
     return Boolean.parseBoolean(target.options().getOrDefault("publisherApi", "false"));
+  }
+
+  private static boolean apApiEnabled(TargetConfig target) {
+    String configured = target.options().get("apApi");
+    return configured == null ? !publisherApiEnabled(target) : Boolean.parseBoolean(configured);
   }
 
   private static void authenticate(
@@ -455,11 +518,15 @@ public final class PhossAdapter implements TargetAdapter {
       builder.header(header, AdapterSupport.secret(authValue));
       return;
     }
-    if (required) throw new AdapterException("phoss publisher authentication is required", true);
+    if (required) throw new AdapterException("phoss API authentication is required", true);
   }
 
   private static URI query(URI uri, String query) {
     return URI.create(uri + (uri.getRawQuery() == null ? "?" : "&") + query);
+  }
+
+  private static URI query(URI uri, String name, String value) {
+    return query(uri, pathSegment(name) + "=" + pathSegment(value));
   }
 
   private static String pathSegment(String value) {
