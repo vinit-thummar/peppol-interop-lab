@@ -6,7 +6,7 @@
   <parent>
     <groupId>io.github.vinit-thummar</groupId>
     <artifactId>peppol-interop-lab-parent</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>${revision}</version>
   </parent>
   <artifactId>peppol-lab-api</artifactId>
 </project>

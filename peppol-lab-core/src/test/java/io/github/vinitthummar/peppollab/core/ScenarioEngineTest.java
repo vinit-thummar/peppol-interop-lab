@@ -35,6 +35,7 @@ class ScenarioEngineTest {
     TargetAdapter adapter = adapter(cleaned, false);
     RunReport report = run(adapter);
 
+    assertThat(report.toolVersion()).isEqualTo(BuildVersion.current());
     assertThat(report.failed()).isOne();
     assertThat(cleaned).isTrue();
   }
