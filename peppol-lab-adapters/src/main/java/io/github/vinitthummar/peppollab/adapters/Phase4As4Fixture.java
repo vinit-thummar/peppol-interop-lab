@@ -7,6 +7,7 @@ import com.helger.collection.commons.ICommonsList;
 import com.helger.http.header.HttpHeaderMap;
 import com.helger.mime.IMimeType;
 import com.helger.mime.parse.MimeTypeParser;
+import com.helger.phase4.CAS4;
 import com.helger.phase4.attachment.IAS4IncomingAttachmentFactory;
 import com.helger.phase4.attachment.WSS4JAttachment;
 import com.helger.phase4.ebms3header.Ebms3SignalMessage;
@@ -37,9 +38,12 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -53,7 +57,7 @@ final class Phase4As4Fixture implements As4Fixture {
   private final ExecutorService executor;
   private final Phase4GlobalScope globalScope;
   private final EphemeralPhase4CryptoFactory cryptoFactory;
-  private final Map<String, byte[]> receivedPayloads = new ConcurrentHashMap<>();
+  private final Map<String, ReceivedMessage> receivedMessages = new ConcurrentHashMap<>();
 
   private Phase4As4Fixture(
       HttpServer server,
@@ -96,6 +100,13 @@ final class Phase4As4Fixture implements As4Fixture {
   }
 
   private void handle(HttpExchange exchange) throws IOException {
+    String path = exchange.getRequestURI().getRawPath();
+    if ("GET".equals(exchange.getRequestMethod())
+        && path.startsWith("/_lab/messages/")) {
+      writeReceiverEvidence(exchange, path.substring("/_lab/messages/".length()));
+      return;
+    }
+
     String query = exchange.getRequestURI().getRawQuery();
     if (query != null && query.contains("mode=slow")) pause(300);
     if (query != null && query.contains("mode=error")) {
@@ -226,7 +237,9 @@ final class Phase4As4Fixture implements As4Fixture {
             bytes = payload.getTextContent().getBytes(StandardCharsets.UTF_8);
           }
           if (bytes == null) return AS4MessageProcessorResult.createFailure();
-          receivedPayloads.put(userMessage.getMessageInfo().getMessageId(), bytes);
+          receivedMessages.put(
+              userMessage.getMessageInfo().getMessageId(),
+              new ReceivedMessage(bytes, routingMetadata(userMessage)));
           return AS4MessageProcessorResult.createSuccess();
         } catch (Exception ex) {
           return AS4MessageProcessorResult.createFailure();
@@ -258,8 +271,69 @@ final class Phase4As4Fixture implements As4Fixture {
   }
 
   byte[] receivedPayload(String messageId) {
-    byte[] value = receivedPayloads.get(messageId);
-    return value == null ? null : value.clone();
+    ReceivedMessage value = receivedMessages.get(messageId);
+    return value == null ? null : value.payload();
+  }
+
+  Map<String, String> receivedRouting(String messageId) {
+    ReceivedMessage value = receivedMessages.get(messageId);
+    return value == null ? null : value.routing();
+  }
+
+  private void writeReceiverEvidence(HttpExchange exchange, String encodedMessageId)
+      throws IOException {
+    String messageId = URLDecoder.decode(encodedMessageId, StandardCharsets.UTF_8);
+    ReceivedMessage message = receivedMessages.get(messageId);
+    if (message == null) {
+      respond(exchange, 404, "text/plain", "message not found");
+      return;
+    }
+    StringBuilder body = new StringBuilder();
+    message.routing().forEach(
+        (name, value) -> body.append(name).append('=').append(value).append('\n'));
+    respond(exchange, 200, "text/plain", body.toString());
+  }
+
+  private static Map<String, String> routingMetadata(Ebms3UserMessage message) {
+    Map<String, String> values = new LinkedHashMap<>();
+    if (message.getPartyInfo() != null) {
+      if (message.getPartyInfo().getFrom() != null
+          && message.getPartyInfo().getFrom().hasPartyIdEntries()) {
+        var party = message.getPartyInfo().getFrom().getPartyIdAtIndex(0);
+        values.put("fromPartyId", value(party.getValue()));
+        values.put("fromPartyType", value(party.getType()));
+      }
+      if (message.getPartyInfo().getTo() != null
+          && message.getPartyInfo().getTo().hasPartyIdEntries()) {
+        var party = message.getPartyInfo().getTo().getPartyIdAtIndex(0);
+        values.put("toPartyId", value(party.getValue()));
+        values.put("toPartyType", value(party.getType()));
+      }
+    }
+    if (message.getCollaborationInfo() != null) {
+      var collaboration = message.getCollaborationInfo();
+      values.put("documentType", value(collaboration.getAction()));
+      if (collaboration.getService() != null) {
+        values.put("process", value(collaboration.getService().getValue()));
+        values.put("processType", value(collaboration.getService().getType()));
+      }
+    }
+    if (message.getMessageProperties() != null) {
+      message.getMessageProperties().getProperty().forEach(property -> {
+        if (CAS4.ORIGINAL_SENDER.equals(property.getName())) {
+          values.put("originalSender", value(property.getValue()));
+          values.put("originalSenderType", value(property.getType()));
+        } else if (CAS4.FINAL_RECIPIENT.equals(property.getName())) {
+          values.put("finalRecipient", value(property.getValue()));
+          values.put("finalRecipientType", value(property.getType()));
+        }
+      });
+    }
+    return Collections.unmodifiableMap(values);
+  }
+
+  private static String value(String value) {
+    return value == null ? "" : value;
   }
 
   private static void respond(HttpExchange exchange, int status, String contentType, String body)
@@ -343,6 +417,18 @@ final class Phase4As4Fixture implements As4Fixture {
       try (var output = exchange.getResponseBody()) {
         output.write(content);
       }
+    }
+  }
+
+  private record ReceivedMessage(byte[] payload, Map<String, String> routing) {
+    private ReceivedMessage {
+      payload = payload.clone();
+      routing = Collections.unmodifiableMap(new LinkedHashMap<>(routing));
+    }
+
+    @Override
+    public byte[] payload() {
+      return payload.clone();
     }
   }
 }

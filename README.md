@@ -23,7 +23,9 @@ See the [official eDelivery specification catalogue](https://docs.peppol.eu/edel
 - Loopback-only deterministic SMP, DNS, and phase4 AS4 fixtures.
 - Six deterministic SMP contracts covering discovery, identifier encoding, missing resources,
   endpoint metadata, and malformed metadata.
-- Positive, negative, HTTP failure, and timeout AS4/resilience scenarios.
+- Six AS4 contracts covering delivery, receiver-observed routing identifiers, trust rejection,
+  payload integrity, duplicate identifiers, and controlled peer failure.
+- Bounded SMP, DNS, and AS4 timeout/resilience scenarios.
 - Console, JSON, and JUnit XML results with stable exit codes.
 - Production-domain guard and environment/file-only secret references.
 
