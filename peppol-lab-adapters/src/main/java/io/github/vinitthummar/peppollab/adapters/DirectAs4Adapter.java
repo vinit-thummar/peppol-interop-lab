@@ -105,7 +105,6 @@ public final class DirectAs4Adapter implements TargetAdapter {
     String keyAlias = target.options().getOrDefault("senderKeyAlias", "sender");
 
     char[] password = AdapterSupport.secret(passwordReference).toCharArray();
-    Instant started = Instant.now();
     try (Phase4GlobalScope ignored = Phase4GlobalScope.open();
          EphemeralPhase4CryptoFactory cryptoFactory = EphemeralPhase4CryptoFactory.load(
              path(keyStoreReference), keyAlias, password, certificate(path(trustReference)))) {
@@ -119,6 +118,7 @@ public final class DirectAs4Adapter implements TargetAdapter {
       StrictReceiptValidation receiptValidation = new StrictReceiptValidation();
       AtomicReference<Ebms3SignalMessage> signalMessage = new AtomicReference<>();
       AtomicReference<Phase4Exception> sendingException = new AtomicReference<>();
+      Instant started = Instant.now();
 
       EAS4UserMessageSendResult sendResult = AS4Sender.builderUserMessage()
           .as4ProfileID(AS4PeppolProfileRegistarSPI.AS4_PROFILE_ID)

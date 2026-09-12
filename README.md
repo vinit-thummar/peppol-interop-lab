@@ -117,6 +117,11 @@ java -jar peppol-lab-cli/target/peppol-lab.jar list
 java -jar peppol-lab-cli/target/peppol-lab.jar run
 ```
 
+Release tags produce a versioned runnable JAR, the standalone scenario JSON Schema, and a
+`SHA256SUMS` file on GitHub Releases. The same tag publishes
+`ghcr.io/vinit-thummar/peppol-interop-lab:<version>` and updates `latest`. See the
+[release procedure](docs/releasing.md) for the guarded tag workflow.
+
 The built-in run starts isolated loopback fixtures on random ports and writes:
 
 - `reports/results.json`

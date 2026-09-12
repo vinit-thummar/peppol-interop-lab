@@ -13,10 +13,12 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.IVersionProvider;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
-@Command(name = "peppol-lab", mixinStandardHelpOptions = true, version = "peppol-lab 0.1.0-SNAPSHOT",
+@Command(name = "peppol-lab", mixinStandardHelpOptions = true,
+    versionProvider = PeppolLab.VersionProvider.class,
     description = "Vendor-neutral Peppol interoperability preflight",
     subcommands = {PeppolLab.Init.class, PeppolLab.Doctor.class, PeppolLab.Validate.class,
         PeppolLab.ListScenarios.class, PeppolLab.Run.class})
@@ -27,6 +29,12 @@ public final class PeppolLab implements Runnable {
 
   @Override public void run() {
     new CommandLine(this).usage(System.out);
+  }
+
+  static final class VersionProvider implements IVersionProvider {
+    @Override public String[] getVersion() {
+      return new String[] {"peppol-lab " + BuildVersion.current()};
+    }
   }
 
   @Command(name = "init", description = "Create a safe local starter configuration")

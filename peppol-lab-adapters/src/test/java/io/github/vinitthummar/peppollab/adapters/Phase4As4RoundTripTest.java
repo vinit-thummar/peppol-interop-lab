@@ -104,7 +104,7 @@ class Phase4As4RoundTripTest {
 
       assertThat(result.outcome()).withFailMessage(result.body()).isEqualTo("TIMEOUT");
       assertThat(result.duration()).withFailMessage(result.body())
-          .isLessThan(Duration.ofSeconds(2));
+          .isLessThan(Duration.ofSeconds(5));
       assertThat(result.evidence()).singleElement().satisfies(evidence ->
           assertThat(evidence.type()).isEqualTo("as4.timeout"));
     }

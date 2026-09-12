@@ -24,7 +24,7 @@ public final class ScenarioEngine {
   public RunReport run(List<Scenario> scenarios) {
     Instant started = Instant.now();
     List<ScenarioRunResult> results = scenarios.stream().map(this::runOne).toList();
-    return new RunReport("0.1.0-SNAPSHOT", started, Instant.now(), results);
+    return new RunReport(BuildVersion.current(), started, Instant.now(), results);
   }
 
   private ScenarioRunResult runOne(Scenario scenario) {

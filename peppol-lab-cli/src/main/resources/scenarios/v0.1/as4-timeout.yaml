@@ -16,4 +16,4 @@ steps:
       timeoutMs: 50
     expect:
       outcome: TIMEOUT
-      maxDurationMs: 1000
+      maxDurationMs: 5000

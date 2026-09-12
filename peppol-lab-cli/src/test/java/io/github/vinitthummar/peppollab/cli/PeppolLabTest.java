@@ -2,6 +2,9 @@ package io.github.vinitthummar.peppollab.cli;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.vinitthummar.peppollab.core.BuildVersion;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -10,6 +13,16 @@ import picocli.CommandLine;
 
 class PeppolLabTest {
   @TempDir Path temporary;
+
+  @Test
+  void reportsTheEmbeddedBuildVersion() {
+    StringWriter output = new StringWriter();
+    CommandLine command = new CommandLine(new PeppolLab());
+    command.setOut(new PrintWriter(output));
+
+    assertThat(command.execute("--version")).isZero();
+    assertThat(output.toString()).isEqualTo("peppol-lab " + BuildVersion.current() + "\n");
+  }
 
   @Test
   void bundledScenariosValidate() {

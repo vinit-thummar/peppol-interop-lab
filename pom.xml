@@ -6,7 +6,7 @@
 
   <groupId>io.github.vinit-thummar</groupId>
   <artifactId>peppol-interop-lab-parent</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>${revision}</version>
   <packaging>pom</packaging>
 
   <name>Peppol Interop Lab</name>
@@ -29,6 +29,7 @@
   </modules>
 
   <properties>
+    <revision>0.1.0-SNAPSHOT</revision>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
@@ -87,6 +88,14 @@
           <version>3.5.2</version>
           <configuration>
             <useModulePath>false</useModulePath>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-resources-plugin</artifactId>
+          <version>3.3.1</version>
+          <configuration>
+            <propertiesEncoding>${project.build.sourceEncoding}</propertiesEncoding>
           </configuration>
         </plugin>
         <plugin>
