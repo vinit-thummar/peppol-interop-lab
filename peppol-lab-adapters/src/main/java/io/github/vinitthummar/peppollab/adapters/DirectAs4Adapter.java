@@ -1,9 +1,11 @@
 package io.github.vinitthummar.peppollab.adapters;
 
+import com.helger.httpclient.HttpClientSettings;
 import com.helger.phase4.CAS4;
 import com.helger.phase4.attachment.AS4OutgoingAttachment;
 import com.helger.phase4.ebms3header.Ebms3Error;
 import com.helger.phase4.ebms3header.Ebms3SignalMessage;
+import com.helger.phase4.messaging.http.HttpRetrySettings;
 import com.helger.phase4.model.MessageProperty;
 import com.helger.phase4.model.pmode.PMode;
 import com.helger.phase4.profile.peppol.AS4PeppolProfileRegistarSPI;
@@ -23,6 +25,7 @@ import io.github.vinitthummar.peppollab.api.TargetConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
@@ -34,11 +37,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import org.apache.hc.core5.util.Timeout;
 
 /** Sends signed and encrypted Peppol-profiled AS4 messages and strictly verifies their receipts. */
 public final class DirectAs4Adapter implements TargetAdapter {
@@ -116,6 +122,8 @@ public final class DirectAs4Adapter implements TargetAdapter {
 
       EAS4UserMessageSendResult sendResult = AS4Sender.builderUserMessage()
           .as4ProfileID(AS4PeppolProfileRegistarSPI.AS4_PROFILE_ID)
+          .httpClientFactory(httpSettings(request.timeout()))
+          .httpRetrySettings(new HttpRetrySettings().setMaxRetries(0))
           .pmode(pmode)
           .cryptoFactory(cryptoFactory)
           .receiverCertificate(receiverCertificate)
@@ -148,13 +156,16 @@ public final class DirectAs4Adapter implements TargetAdapter {
           .signalMsgValidationResultHdl(receiptValidation)
           .sendMessageAndCheckForReceipt(sendingException::set);
 
-      return result(
+      AdapterResult result = result(
           sendResult,
           sendingException.get(),
           receiptValidation,
           signalMessage.get(),
           messageId,
           started);
+      return "SUCCESS".equals(result.outcome())
+          ? collectReceiverEvidence(target, request.timeout(), messageId, result)
+          : result;
     } catch (IOException | GeneralSecurityException | RuntimeException ex) {
       throw new AdapterException("AS4 cryptographic exchange failed: " + ex.getMessage(), ex, true);
     } finally {
@@ -169,6 +180,48 @@ public final class DirectAs4Adapter implements TargetAdapter {
         .POST(HttpRequest.BodyPublishers.noBody())
         .build();
     return AdapterSupport.send(client, request);
+  }
+
+  private AdapterResult collectReceiverEvidence(
+      TargetConfig target, Duration timeout, String messageId, AdapterResult result)
+      throws AdapterException {
+    String pathTemplate = target.options().get("fixtureEvidencePath");
+    if (pathTemplate == null || pathTemplate.isBlank()) return result;
+
+    String encodedMessageId = URLEncoder.encode(messageId, StandardCharsets.UTF_8)
+        .replace("+", "%20");
+    URI endpoint = AdapterSupport.resolve(
+        target, pathTemplate.replace("{messageId}", encodedMessageId));
+    HttpRequest request = HttpRequest.newBuilder(endpoint).timeout(timeout).GET().build();
+    AdapterResult observation = AdapterSupport.send(client, request);
+    if (!"SUCCESS".equals(observation.outcome())) {
+      throw new AdapterException(
+          "AS4 receiver evidence unavailable for message " + messageId, true);
+    }
+
+    Map<String, Object> collected = new LinkedHashMap<>();
+    observation.body().lines()
+        .filter(line -> line.contains("="))
+        .map(line -> line.split("=", 2))
+        .forEach(parts -> collected.put(parts[0], parts[1]));
+    Map<String, Object> attributes = Collections.unmodifiableMap(collected);
+    List<Evidence> evidence = new ArrayList<>(result.evidence());
+    evidence.add(new Evidence("as4.receiver-observation", Instant.now(), attributes));
+    return new AdapterResult(
+        result.outcome(),
+        result.statusCode(),
+        result.body() + "; receiver-observed " + observation.body().replace('\n', ' ').trim(),
+        result.headers(),
+        result.duration(),
+        evidence);
+  }
+
+  private static HttpClientSettings httpSettings(Duration duration) {
+    Timeout timeout = Timeout.ofMilliseconds(Math.max(1L, duration.toMillis()));
+    return new HttpClientSettings()
+        .setConnectionRequestTimeout(timeout)
+        .setConnectTimeout(timeout)
+        .setResponseTimeout(timeout);
   }
 
   private static AdapterResult result(
@@ -209,6 +262,17 @@ public final class DirectAs4Adapter implements TargetAdapter {
     failures.addAll(validation.errors());
     if (sendingException != null) failures.add(describe(sendingException));
     if (failures.isEmpty()) failures.add("phase4 result: " + sendResult.getID());
+    if (isTimeout(sendingException)) {
+      return new AdapterResult(
+          "TIMEOUT",
+          null,
+          String.join("; ", failures),
+          Map.of(),
+          duration,
+          List.of(new Evidence("as4.timeout", Instant.now(), Map.of(
+              "messageId", messageId,
+              "phase4Result", sendResult.getID()))));
+    }
     return new AdapterResult(
         "AS4_ERROR",
         null,
@@ -276,6 +340,20 @@ public final class DirectAs4Adapter implements TargetAdapter {
       current = current.getCause();
     }
     return String.join(" -> ", messages);
+  }
+
+  private static boolean isTimeout(Throwable throwable) {
+    Throwable current = throwable;
+    while (current != null) {
+      String type = current.getClass().getSimpleName().toLowerCase(java.util.Locale.ROOT);
+      String message = current.getMessage();
+      if (type.contains("timeout")
+          || message != null && message.toLowerCase(java.util.Locale.ROOT).contains("timed out")) {
+        return true;
+      }
+      current = current.getCause();
+    }
+    return false;
   }
 
   private static final class StrictReceiptValidation

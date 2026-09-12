@@ -164,7 +164,10 @@ public final class PeppolLab implements Runnable {
   private static LabConfig defaultConfig() {
     return new LabConfig(Map.of(
         "smp-fixture", new TargetConfig("standard-smp", URI.create("fixture:smp"), Map.of()),
-        "as4-fixture", new TargetConfig("direct-as4", URI.create("fixture:as4"), Map.of()),
+        "as4-fixture", new TargetConfig(
+            "direct-as4",
+            URI.create("fixture:as4"),
+            Map.of("fixtureEvidencePath", "/_lab/messages/{messageId}")),
         "as4-untrusted-sender-fixture", new TargetConfig(
             "direct-as4",
             URI.create("fixture:as4"),
@@ -186,6 +189,8 @@ public final class PeppolLab implements Runnable {
         as4-fixture:
           adapter: direct-as4
           baseUrl: fixture:as4
+          options:
+            fixtureEvidencePath: /_lab/messages/{messageId}
         as4-untrusted-sender-fixture:
           adapter: direct-as4
           baseUrl: fixture:as4

@@ -47,6 +47,70 @@ class Phase4As4RoundTripTest {
   }
 
   @Test
+  void recordsRoutingIdentifiersObservedByTheReceiver() throws Exception {
+    String messageId = "routing-001@interop-lab";
+    Map<String, Object> parameters = Map.of(
+        "messageId", messageId,
+        "sender", "POP000111",
+        "receiver", "POP000222",
+        "documentType", "urn:example:documents:invoice:1",
+        "process", "urn:example:processes:billing:1",
+        "originalSender", "9915:original-sender",
+        "finalRecipient", "0208:final-recipient");
+
+    try (EphemeralPki pki = EphemeralPki.create();
+         Phase4As4Fixture fixture = Phase4As4Fixture.start(pki)) {
+      var result = new DirectAs4Adapter().execute(
+          new TargetConfig(
+              "direct-as4",
+              fixture.endpoint(),
+              Map.of("fixtureEvidencePath", "/_lab/messages/{messageId}")),
+          new AdapterRequest("as4.send", parameters, Duration.ofSeconds(10)),
+          new AdapterContext(output, false, pki.runtimeValues()));
+
+      assertThat(result.outcome()).withFailMessage(result.body()).isEqualTo("SUCCESS");
+      assertThat(result.body()).contains(
+          "fromPartyId=POP000111",
+          "toPartyId=POP000222",
+          "documentType=urn:example:documents:invoice:1",
+          "process=urn:example:processes:billing:1",
+          "originalSender=9915:original-sender",
+          "finalRecipient=0208:final-recipient");
+      assertThat(result.evidence()).hasSize(2);
+      assertThat(result.evidence().get(1).type()).isEqualTo("as4.receiver-observation");
+      assertThat(result.evidence().get(1).attributes())
+          .containsEntry("originalSenderType", "iso6523-actorid-upis")
+          .containsEntry("finalRecipientType", "iso6523-actorid-upis")
+          .containsEntry("processType", "cenbii-procid-ubl");
+      assertThat(fixture.receivedRouting(messageId))
+          .containsEntry("fromPartyId", "POP000111")
+          .containsEntry("toPartyId", "POP000222");
+    }
+  }
+
+  @Test
+  void boundsSlowPeerResponseWithRequestTimeout() throws Exception {
+    String messageId = "timeout-001@interop-lab";
+
+    try (EphemeralPki pki = EphemeralPki.create();
+         Phase4As4Fixture fixture = Phase4As4Fixture.start(pki)) {
+      var result = new DirectAs4Adapter().execute(
+          new TargetConfig("direct-as4", fixture.endpoint(), Map.of()),
+          new AdapterRequest(
+              "as4.send",
+              Map.of("messageId", messageId, "path", "/as4/accept?mode=slow"),
+              Duration.ofMillis(50)),
+          new AdapterContext(output, false, pki.runtimeValues()));
+
+      assertThat(result.outcome()).withFailMessage(result.body()).isEqualTo("TIMEOUT");
+      assertThat(result.duration()).withFailMessage(result.body())
+          .isLessThan(Duration.ofSeconds(2));
+      assertThat(result.evidence()).singleElement().satisfies(evidence ->
+          assertThat(evidence.type()).isEqualTo("as4.timeout"));
+    }
+  }
+
+  @Test
   void rejectsSenderOutsideTheReceiversTrustAnchor() throws Exception {
     String messageId = "untrusted-sender-001@interop-lab";
 
