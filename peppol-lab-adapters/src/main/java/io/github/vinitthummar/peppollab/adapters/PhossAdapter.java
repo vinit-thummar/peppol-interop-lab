@@ -23,10 +23,15 @@ import java.util.concurrent.ConcurrentHashMap;
 /** Adapter for phoss SMP publishing and phoss AP outbound submission/status APIs. */
 public final class PhossAdapter implements TargetAdapter {
   private static final String DEFAULT_PARTICIPANT_SCHEME = "iso6523-actorid-upis";
+  private static final String DEFAULT_DOCUMENT_SCHEME = "busdox-docid-qns";
+  private static final String DEFAULT_PROCESS_SCHEME = "cenbii-procid-ubl";
+  private static final String DEFAULT_TRANSPORT_PROFILE = "peppol-transport-as4-v2_0";
   private final HttpClient client = HttpClient.newBuilder()
       .followRedirects(HttpClient.Redirect.NEVER)
       .build();
   private final Set<ProvisionedServiceGroup> provisioned = ConcurrentHashMap.newKeySet();
+  private final Set<ProvisionedServiceMetadata> provisionedMetadata =
+      ConcurrentHashMap.newKeySet();
 
   @Override public String id() { return "phoss"; }
 
@@ -46,6 +51,9 @@ public final class PhossAdapter implements TargetAdapter {
       case "smp.service-group.put" -> putServiceGroup(target, request, context);
       case "smp.service-group.get" -> getServiceGroup(target, request);
       case "smp.service-group.delete" -> deleteServiceGroup(target, request, context);
+      case "smp.service-metadata.put" -> putServiceMetadata(target, request);
+      case "smp.service-metadata.get" -> getServiceMetadata(target, request);
+      case "smp.service-metadata.delete" -> deleteServiceMetadata(target, request);
       default -> AdapterResult.skipped("Unsupported phoss action: " + request.action());
     };
   }
@@ -126,6 +134,59 @@ public final class PhossAdapter implements TargetAdapter {
     return result;
   }
 
+  private AdapterResult putServiceMetadata(TargetConfig target, AdapterRequest request)
+      throws AdapterException {
+    requirePublisherApi(target);
+    String participantScheme = AdapterSupport.parameter(
+        request.parameters(), "participantScheme", DEFAULT_PARTICIPANT_SCHEME);
+    String participantValue = requiredParameter(request, "participantValue");
+    String documentScheme = AdapterSupport.parameter(
+        request.parameters(), "documentScheme", DEFAULT_DOCUMENT_SCHEME);
+    String documentValue = requiredParameter(request, "documentValue");
+    URI resource = serviceMetadataUri(
+        target, participantScheme, participantValue, documentScheme, documentValue);
+    ensureAbsent(target, resource, request.timeout(), "service metadata");
+
+    String payload = AdapterSupport.parameter(request.parameters(), "payload", null);
+    if (payload == null) {
+      payload = serviceMetadataXml(
+          request, participantScheme, participantValue, documentScheme, documentValue);
+    }
+    HttpRequest.Builder builder = HttpRequest.newBuilder(resource)
+        .timeout(request.timeout())
+        .header("Content-Type", "application/xml")
+        .PUT(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8));
+    authenticate(target, builder, true);
+    AdapterResult result = AdapterSupport.send(client, builder.build());
+    if (successful(result)) {
+      provisionedMetadata.add(new ProvisionedServiceMetadata(target, resource));
+    }
+    return result;
+  }
+
+  private AdapterResult getServiceMetadata(TargetConfig target, AdapterRequest request)
+      throws AdapterException {
+    requirePublisherApi(target);
+    URI resource = serviceMetadataUri(target, request);
+    HttpRequest.Builder builder = HttpRequest.newBuilder(resource)
+        .timeout(request.timeout())
+        .header("Accept", "application/xml")
+        .GET();
+    authenticate(target, builder, false);
+    return AdapterSupport.send(client, builder.build());
+  }
+
+  private AdapterResult deleteServiceMetadata(TargetConfig target, AdapterRequest request)
+      throws AdapterException {
+    requirePublisherApi(target);
+    URI resource = serviceMetadataUri(target, request);
+    AdapterResult result = delete(target, resource, request.timeout());
+    if (successful(result) || Integer.valueOf(404).equals(result.statusCode())) {
+      provisionedMetadata.remove(new ProvisionedServiceMetadata(target, resource));
+    }
+    return result;
+  }
+
   @Override
   public void cleanup(TargetConfig target, AdapterContext context) throws AdapterException {
     cleanup(target);
@@ -135,6 +196,7 @@ public final class PhossAdapter implements TargetAdapter {
   public void close() throws AdapterException {
     Set<TargetConfig> targets = new LinkedHashSet<>();
     provisioned.forEach(resource -> targets.add(resource.target()));
+    provisionedMetadata.forEach(resource -> targets.add(resource.target()));
     List<String> failures = new ArrayList<>();
     for (TargetConfig target : targets) {
       try {
@@ -150,6 +212,19 @@ public final class PhossAdapter implements TargetAdapter {
 
   private void cleanup(TargetConfig target) throws AdapterException {
     List<String> failures = new ArrayList<>();
+    for (ProvisionedServiceMetadata resource : List.copyOf(provisionedMetadata)) {
+      if (!resource.target().equals(target)) continue;
+      try {
+        AdapterResult result = delete(target, resource.uri(), Duration.ofSeconds(10));
+        if (successful(result) || Integer.valueOf(404).equals(result.statusCode())) {
+          provisionedMetadata.remove(resource);
+        } else {
+          failures.add(resource.uri() + " returned HTTP " + result.statusCode());
+        }
+      } catch (AdapterException ex) {
+        failures.add(resource.uri() + ": " + ex.getMessage());
+      }
+    }
     for (ProvisionedServiceGroup resource : List.copyOf(provisioned)) {
       if (!resource.target().equals(target)) continue;
       try {
@@ -164,9 +239,8 @@ public final class PhossAdapter implements TargetAdapter {
       }
     }
     if (!failures.isEmpty()) {
-      throw new AdapterException(
-          "Failed to clean up provisioned phoss SMP service groups: " + String.join("; ", failures),
-          true);
+      throw new AdapterException("Failed to clean up provisioned phoss SMP resources: "
+          + String.join("; ", failures), true);
     }
   }
 
@@ -181,7 +255,22 @@ public final class PhossAdapter implements TargetAdapter {
     return AdapterSupport.send(client, builder.build());
   }
 
+  private AdapterResult delete(TargetConfig target, URI resource, Duration timeout)
+      throws AdapterException {
+    HttpRequest.Builder builder = HttpRequest.newBuilder(resource)
+        .timeout(timeout)
+        .DELETE();
+    authenticate(target, builder, true);
+    return AdapterSupport.send(client, builder.build());
+  }
+
   private void ensureAbsent(TargetConfig target, URI resource, Duration timeout)
+      throws AdapterException {
+    ensureAbsent(target, resource, timeout, "service group");
+  }
+
+  private void ensureAbsent(
+      TargetConfig target, URI resource, Duration timeout, String resourceType)
       throws AdapterException {
     HttpRequest.Builder builder = HttpRequest.newBuilder(resource)
         .timeout(timeout)
@@ -191,11 +280,12 @@ public final class PhossAdapter implements TargetAdapter {
     AdapterResult result = AdapterSupport.send(client, builder.build());
     if (successful(result)) {
       throw new AdapterException(
-          "Refusing to overwrite existing phoss SMP service group " + resource, false);
+          "Refusing to overwrite existing phoss SMP " + resourceType + " " + resource, false);
     }
     if (!Integer.valueOf(404).equals(result.statusCode())) {
       throw new AdapterException(
-          "Cannot verify that phoss SMP service group is absent; HTTP " + result.statusCode(),
+          "Cannot verify that phoss SMP " + resourceType + " is absent; HTTP "
+              + result.statusCode(),
           true);
     }
   }
@@ -208,12 +298,86 @@ public final class PhossAdapter implements TargetAdapter {
     return AdapterSupport.resolve(target, "/" + pathSegment(scheme + "::" + value));
   }
 
+  private static URI serviceMetadataUri(TargetConfig target, AdapterRequest request)
+      throws AdapterException {
+    return serviceMetadataUri(
+        target,
+        AdapterSupport.parameter(
+            request.parameters(), "participantScheme", DEFAULT_PARTICIPANT_SCHEME),
+        requiredParameter(request, "participantValue"),
+        AdapterSupport.parameter(
+            request.parameters(), "documentScheme", DEFAULT_DOCUMENT_SCHEME),
+        requiredParameter(request, "documentValue"));
+  }
+
+  private static URI serviceMetadataUri(
+      TargetConfig target,
+      String participantScheme,
+      String participantValue,
+      String documentScheme,
+      String documentValue) throws AdapterException {
+    if (documentScheme == null || documentScheme.isBlank()) {
+      throw new AdapterException("SMP documentScheme must not be blank", false);
+    }
+    return URI.create(serviceGroupUri(target, participantScheme, participantValue)
+        + "/services/" + pathSegment(documentScheme + "::" + documentValue));
+  }
+
   private static String serviceGroupXml(String scheme, String value) {
     return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
         + "<ServiceGroup xmlns=\"http://busdox.org/serviceMetadata/publishing/1.0/\">"
         + "<ParticipantIdentifier scheme=\"" + xml(scheme) + "\">" + xml(value)
         + "</ParticipantIdentifier><ServiceMetadataReferenceCollection/>"
         + "</ServiceGroup>";
+  }
+
+  private static String serviceMetadataXml(
+      AdapterRequest request,
+      String participantScheme,
+      String participantValue,
+      String documentScheme,
+      String documentValue) throws AdapterException {
+    String processScheme = AdapterSupport.parameter(
+        request.parameters(), "processScheme", DEFAULT_PROCESS_SCHEME);
+    String processValue = requiredParameter(request, "processValue");
+    String transportProfile = AdapterSupport.parameter(
+        request.parameters(), "transportProfile", DEFAULT_TRANSPORT_PROFILE);
+    String endpointUrl = requiredParameter(request, "endpointUrl");
+    String certificate = requiredParameter(request, "certificate");
+    String serviceDescription = AdapterSupport.parameter(
+        request.parameters(), "serviceDescription", "Peppol interoperability laboratory endpoint");
+    String technicalContactUrl = AdapterSupport.parameter(
+        request.parameters(), "technicalContactUrl",
+        "https://github.com/vinit-thummar/peppol-interop-lab");
+    boolean requireBusinessLevelSignature = booleanParameter(
+        request, "requireBusinessLevelSignature", false);
+
+    return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<smp:ServiceMetadata xmlns:smp=\"http://busdox.org/serviceMetadata/publishing/1.0/\""
+        + " xmlns:id=\"http://busdox.org/transport/identifiers/1.0/\""
+        + " xmlns:wsa=\"http://www.w3.org/2005/08/addressing\">"
+        + "<smp:ServiceInformation>"
+        + "<id:ParticipantIdentifier scheme=\"" + xml(participantScheme) + "\">"
+        + xml(participantValue) + "</id:ParticipantIdentifier>"
+        + "<id:DocumentIdentifier scheme=\"" + xml(documentScheme) + "\">"
+        + xml(documentValue) + "</id:DocumentIdentifier>"
+        + "<smp:ProcessList><smp:Process>"
+        + "<id:ProcessIdentifier scheme=\"" + xml(processScheme) + "\">"
+        + xml(processValue) + "</id:ProcessIdentifier>"
+        + "<smp:ServiceEndpointList><smp:Endpoint transportProfile=\""
+        + xml(transportProfile) + "\">"
+        + "<wsa:EndpointReference><wsa:Address>" + xml(endpointUrl)
+        + "</wsa:Address></wsa:EndpointReference>"
+        + "<smp:RequireBusinessLevelSignature>" + requireBusinessLevelSignature
+        + "</smp:RequireBusinessLevelSignature>"
+        + "<smp:Certificate>" + xml(certificate) + "</smp:Certificate>"
+        + "<smp:ServiceDescription>" + xml(serviceDescription)
+        + "</smp:ServiceDescription>"
+        + "<smp:TechnicalContactUrl>" + xml(technicalContactUrl)
+        + "</smp:TechnicalContactUrl>"
+        + "</smp:Endpoint></smp:ServiceEndpointList>"
+        + "</smp:Process></smp:ProcessList>"
+        + "</smp:ServiceInformation></smp:ServiceMetadata>";
   }
 
   private static String requiredParameter(AdapterRequest request, String name)
@@ -316,4 +480,5 @@ public final class PhossAdapter implements TargetAdapter {
   }
 
   private record ProvisionedServiceGroup(TargetConfig target, URI uri) {}
+  private record ProvisionedServiceMetadata(TargetConfig target, URI uri) {}
 }
