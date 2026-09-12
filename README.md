@@ -53,11 +53,18 @@ for how this lightweight workflow complements GITB and the official OpenPeppol T
 
 ## Stage three in progress
 
-The phoss SMP adapter now covers service-group and service-metadata lifecycles over the publisher
+The phoss SMP adapter covers service-group and service-metadata lifecycles over the publisher
 REST API. It checks that each resource does not already exist, creates it, reads it back, and removes
 it. Resources still present after a failed scenario are deleted in dependency order: service
 metadata first, then its service group. SML mutation remains disabled by default; enabling either
 service-group SML flag requires the explicit `--allow-production` override.
+
+The phoss adapter also implements the current phoss AP raw-document submission contract. It builds
+the identifier-based `/api/outbound/submit/...` route, forwards supported SBDH and diagnostic query
+parameters, and queries `/api/outbound/status/{sbdhInstanceID}` with optional archive lookup. Payloads
+may be inline or loaded from a file; neither request payloads nor referenced API tokens are copied
+into evidence. See [`examples/phoss-ap`](examples/phoss-ap/) for the credentials-required reference
+flow.
 
 Run the example against a local phoss SMP instance after setting its writable REST credentials:
 
@@ -92,7 +99,8 @@ file. The management UI is bound only to
 
 This disposable environment uses phoss SMP's documented initial administrator account solely on
 the isolated local network. It must never be exposed or reused as a production deployment. The
-next stage-three slice adds bring-your-own-test-certificate phoss AP flows.
+phoss AP example remains opt-in because the AP intentionally requires a correctly configured
+official Peppol test identity and trust chain; the laboratory never bundles those credentials.
 
 ## Build and run
 
@@ -159,6 +167,7 @@ targets:
     adapter: phoss
     baseUrl: http://127.0.0.1:8090
     options:
+      apApi: "true"
       authHeader: X-Token
       authValue: env:PHOSS_AP_TOKEN
 ```

@@ -1,0 +1,8 @@
+targets:
+  phoss-ap:
+    adapter: phoss
+    baseUrl: http://127.0.0.1:8090
+    options:
+      apApi: "true"
+      authHeader: X-Token
+      authValue: env:PHOSS_AP_TOKEN
