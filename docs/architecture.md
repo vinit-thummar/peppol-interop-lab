@@ -26,3 +26,9 @@ remote test data register it during successful provisioning and make cleanup ide
 failure is reported as a laboratory infrastructure error rather than being hidden behind the original
 contract result. The phoss adapter removes service metadata before service groups so cleanup respects
 the publisher API's ownership hierarchy.
+
+The phoss SMP reference environment is an orchestration layer, not a repackaged vendor server. It
+uses the official pinned phoss SMP image, exposes the UI on loopback only, and connects the lab over
+an internal Compose network. A short-lived initializer creates the response-signing key inside the
+disposable volume. The launcher removes that private key, the XML data, and the runtime secret after
+each execution while retaining only the lab reports.

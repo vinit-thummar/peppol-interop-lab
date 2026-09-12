@@ -1,0 +1,8 @@
+targets:
+  phoss-smp:
+    adapter: phoss
+    baseUrl: http://phoss-smp:8080
+    options:
+      publisherApi: "true"
+      username: env:PHOSS_SMP_USERNAME
+      password: file:/run/secrets/phoss_smp_password

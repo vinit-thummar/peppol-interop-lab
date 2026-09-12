@@ -325,10 +325,11 @@ public final class PhossAdapter implements TargetAdapter {
 
   private static String serviceGroupXml(String scheme, String value) {
     return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-        + "<ServiceGroup xmlns=\"http://busdox.org/serviceMetadata/publishing/1.0/\">"
-        + "<ParticipantIdentifier scheme=\"" + xml(scheme) + "\">" + xml(value)
-        + "</ParticipantIdentifier><ServiceMetadataReferenceCollection/>"
-        + "</ServiceGroup>";
+        + "<smp:ServiceGroup xmlns:smp=\"http://busdox.org/serviceMetadata/publishing/1.0/\""
+        + " xmlns:id=\"http://busdox.org/transport/identifiers/1.0/\">"
+        + "<id:ParticipantIdentifier scheme=\"" + xml(scheme) + "\">" + xml(value)
+        + "</id:ParticipantIdentifier><smp:ServiceMetadataReferenceCollection/>"
+        + "</smp:ServiceGroup>";
   }
 
   private static String serviceMetadataXml(

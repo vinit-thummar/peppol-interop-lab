@@ -53,6 +53,11 @@ class PhossAdapterTest {
       assertThat(requests.get(1).rawPath())
           .isEqualTo("/smp/iso6523-actorid-upis%3A%3A9915%3Ainterop-lab-stage3");
       assertThat(requests.get(1).rawQuery()).isEqualTo("create-in-sml=false");
+      assertThat(requests.get(1).body())
+          .contains(
+              "xmlns:id=\"http://busdox.org/transport/identifiers/1.0/\"",
+              "<id:ParticipantIdentifier scheme=\"iso6523-actorid-upis\">"
+                  + "9915:interop-lab-stage3</id:ParticipantIdentifier>");
       assertThat(requests.get(3).rawQuery()).isEqualTo("delete-in-sml=false");
       assertThat(requests.get(1).authorization()).isEqualTo("Basic " + Base64.getEncoder()
           .encodeToString("interop:correct horse".getBytes(StandardCharsets.UTF_8)));

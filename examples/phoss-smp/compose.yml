@@ -1,0 +1,104 @@
+name: peppol-interop-lab-phoss-smp
+
+services:
+  smp-keystore-init:
+    # This is also the Dockerfile build stage, so no extra Java image is needed.
+    image: maven:3.9.11-eclipse-temurin-21
+    environment:
+      LAB_KEYSTORE_PASSWORD: ${PHOSS_SMP_KEYSTORE_PASSWORD}
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - >-
+        mkdir -p /data/keystore;
+        keytool -genkeypair
+        -alias lab-smp
+        -keyalg RSA
+        -keysize 2048
+        -validity 7
+        -dname 'CN=peppol-interop-lab,OU=Testing,O=Peppol Interop Lab,C=XX'
+        -storetype PKCS12
+        -keystore /data/keystore/lab-smp.p12
+        -storepass "$$LAB_KEYSTORE_PASSWORD"
+        -keypass "$$LAB_KEYSTORE_PASSWORD";
+        chmod 600 /data/keystore/lab-smp.p12
+    volumes:
+      - phoss-smp-data:/data
+    network_mode: none
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+
+  phoss-smp:
+    image: ${PHOSS_SMP_IMAGE}
+    depends_on:
+      smp-keystore-init:
+        condition: service_completed_successfully
+    environment:
+      WEBAPP_DATAPATH: /var/lib/phoss-smp
+      SML_SMPID: PEPPOL-INTEROP-LAB
+      SMP_BACKEND: xml
+      SMP_KEYSTORE_TYPE: pkcs12
+      SMP_KEYSTORE_PATH: /var/lib/phoss-smp/keystore/lab-smp.p12
+      SMP_KEYSTORE_PASSWORD: ${PHOSS_SMP_KEYSTORE_PASSWORD}
+      SMP_KEYSTORE_KEY_ALIAS: lab-smp
+      SMP_KEYSTORE_KEY_PASSWORD: ${PHOSS_SMP_KEYSTORE_PASSWORD}
+    ports:
+      - "127.0.0.1:${PHOSS_SMP_PORT:-8080}:8080"
+    volumes:
+      - phoss-smp-data:/var/lib/phoss-smp
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8080;
+          printf 'GET /smp-ready HTTP/1.0\r\n\r\n' >&3;
+          read -r response <&3;
+          [[ $$response == *' 200 '* ]]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 20s
+    networks: [laboratory]
+
+  peppol-lab:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command:
+      - run
+      - --no-fixtures
+      - --config
+      - /work/config/peppol-lab.yml
+      - --output
+      - /work/reports
+      - /work/scenarios/service-group-lifecycle.yaml
+      - /work/scenarios/service-metadata-lifecycle.yaml
+    depends_on:
+      phoss-smp:
+        condition: service_healthy
+    environment:
+      PHOSS_SMP_USERNAME: admin@helger.com
+    user: "${LAB_UID:-10001}:${LAB_GID:-10001}"
+    secrets: [phoss_smp_password]
+    volumes:
+      - ./container/peppol-lab.yml:/work/config/peppol-lab.yml:ro
+      - ./service-group-lifecycle.yaml:/work/scenarios/service-group-lifecycle.yaml:ro
+      - ./service-metadata-lifecycle.yaml:/work/scenarios/service-metadata-lifecycle.yaml:ro
+      - ./reports:/work/reports
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    networks: [laboratory]
+
+networks:
+  laboratory:
+    internal: true
+
+volumes:
+  phoss-smp-data:
+
+secrets:
+  phoss_smp_password:
+    file: ./.state/phoss-smp-password
