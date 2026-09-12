@@ -20,3 +20,8 @@ Adapters receive secrets by reference. They must not put authorization values, p
 business payloads in evidence. Built-in fixtures listen on `127.0.0.1` with operating-system-assigned
 ports and exist only for the duration of a run. Generated PKCS#12 stores stay in an owner-only
 temporary directory and are deleted at shutdown; public certificate fingerprints remain in evidence.
+
+Scenario targets are cleaned after every scenario, including failed scenarios. Adapters that create
+remote test data register it during successful provisioning and make cleanup idempotent. A cleanup
+failure is reported as a laboratory infrastructure error rather than being hidden behind the original
+contract result.

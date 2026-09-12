@@ -1,7 +1,11 @@
 targets:
   phoss-smp:
-    adapter: standard-smp
+    adapter: phoss
     baseUrl: http://127.0.0.1:8080
+    options:
+      publisherApi: "true"
+      username: env:PHOSS_SMP_USERNAME
+      password: env:PHOSS_SMP_PASSWORD
   phoss-ap:
     adapter: phoss
     baseUrl: http://127.0.0.1:8090

@@ -51,6 +51,28 @@ certificate-rejection scenario uses an independently generated CA and retains on
 identity's public certificates and fingerprints. See the [worldwide testing landscape](docs/landscape.md)
 for how this lightweight workflow complements GITB and the official OpenPeppol Testbed.
 
+## Stage three in progress
+
+The first stage-three slice adds a phoss SMP service-group lifecycle over its publisher REST API.
+The adapter checks that the participant does not already exist, creates it with
+`create-in-sml=false`, reads it back, and deletes it with `delete-in-sml=false`. Resources still
+present after a failed scenario are removed by the adapter lifecycle hook. Enabling either SML
+mutation flag requires the explicit `--allow-production` override.
+
+Run the example against a local phoss SMP instance after setting its writable REST credentials:
+
+```bash
+export PHOSS_SMP_USERNAME='your-rest-user'
+export PHOSS_SMP_PASSWORD='your-rest-password'
+java -jar peppol-lab-cli/target/peppol-lab.jar run --no-fixtures \
+  --config examples/phoss-smp/peppol-lab.yml \
+  examples/phoss-smp/service-group-lifecycle.yaml
+```
+
+The example participant must be dedicated to the laboratory. Provisioning refuses to overwrite an
+existing service group. The next stage-three slices add service-metadata provisioning, a reusable
+phoss SMP container environment, and bring-your-own-test-certificate phoss AP flows.
+
 ## Build and run
 
 Requirements: Java 21+ and Maven 3.9+.
@@ -105,6 +127,13 @@ targets:
       senderKeyAlias: sender
       trustCertificate: file:/mounted/ca.pem
       receiverCertificate: file:/mounted/receiver.pem
+  phoss-smp:
+    adapter: phoss
+    baseUrl: http://127.0.0.1:8080
+    options:
+      publisherApi: "true"
+      username: env:PHOSS_SMP_USERNAME
+      password: env:PHOSS_SMP_PASSWORD
   phoss-ap:
     adapter: phoss
     baseUrl: http://127.0.0.1:8090
