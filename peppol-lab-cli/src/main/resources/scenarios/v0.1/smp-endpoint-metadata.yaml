@@ -1,0 +1,28 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: smp-endpoint-metadata
+  description: Retrieves the AS4 endpoint, validity window, certificate, and contact metadata
+  tags: [smp, positive, endpoint, metadata]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [SMP_LOOKUP]
+steps:
+  - id: lookup-service-metadata
+    target: smp-fixture
+    action: smp.get
+    with:
+      participantScheme: iso6523-actorid-upis
+      participantValue: "9915:receiver"
+      documentScheme: busdox-docid-qns
+      documentValue: "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+    expect:
+      status: 200
+      outcome: SUCCESS
+      contains:
+        - SignedServiceMetadata
+        - peppol-transport-as4-v2_0
+        - "http://127.0.0.1/as4"
+        - "2026-01-01T00:00:00Z"
+        - "2099-12-31T23:59:59Z"
+        - TEFCLUNFUlQ=
+        - "mailto:fixture@example.invalid"

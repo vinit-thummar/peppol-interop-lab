@@ -1,0 +1,21 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: smp-unknown-document
+  description: Reports an unknown document type separately from an unknown participant
+  tags: [smp, negative, document]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [SMP_LOOKUP]
+steps:
+  - id: lookup-unknown-document
+    target: smp-fixture
+    action: smp.get
+    with:
+      participantScheme: iso6523-actorid-upis
+      participantValue: "9915:receiver"
+      documentScheme: busdox-docid-qns
+      documentValue: "urn:test:unknown-document::1"
+    expect:
+      status: 404
+      outcome: HTTP_ERROR
+      contains: [document not found]
