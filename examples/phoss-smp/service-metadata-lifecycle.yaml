@@ -1,0 +1,71 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: phoss-smp-service-metadata-lifecycle
+  description: Provisions a complete Peppol service group and service-metadata record through phoss SMP
+  tags: [smp, phoss, provisioning, metadata, local]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [SMP_PROVISION]
+steps:
+  - id: provision-service-group
+    target: phoss-smp
+    action: smp.service-group.put
+    with:
+      participantScheme: iso6523-actorid-upis
+      participantValue: 9915:interop-lab-stage3-metadata
+      createInSml: false
+    expect: { status: 200, outcome: SUCCESS }
+  - id: provision-service-metadata
+    target: phoss-smp
+    action: smp.service-metadata.put
+    with:
+      participantScheme: iso6523-actorid-upis
+      participantValue: 9915:interop-lab-stage3-metadata
+      documentScheme: busdox-docid-qns
+      documentValue: urn:oasis:names:specification:ubl:schema:xsd:Invoice-2::Invoice##urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0::2.1
+      processScheme: cenbii-procid-ubl
+      processValue: urn:fdc:peppol.eu:2017:poacc:billing:01:1.0
+      transportProfile: peppol-transport-as4-v2_0
+      endpointUrl: http://127.0.0.1:8090/as4
+      certificate: bGFiLXRlc3QtY2VydGlmaWNhdGU=
+      serviceDescription: Local interoperability laboratory endpoint
+      technicalContactUrl: https://github.com/vinit-thummar/peppol-interop-lab
+    expect: { status: 200, outcome: SUCCESS }
+  - id: read-service-metadata
+    target: phoss-smp
+    action: smp.service-metadata.get
+    with:
+      participantScheme: iso6523-actorid-upis
+      participantValue: 9915:interop-lab-stage3-metadata
+      documentScheme: busdox-docid-qns
+      documentValue: urn:oasis:names:specification:ubl:schema:xsd:Invoice-2::Invoice##urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0::2.1
+    expect:
+      status: 200
+      outcome: SUCCESS
+      contains: [SignedServiceMetadata, peppol-transport-as4-v2_0, "http://127.0.0.1:8090/as4"]
+  - id: delete-service-metadata
+    target: phoss-smp
+    action: smp.service-metadata.delete
+    with:
+      participantScheme: iso6523-actorid-upis
+      participantValue: 9915:interop-lab-stage3-metadata
+      documentScheme: busdox-docid-qns
+      documentValue: urn:oasis:names:specification:ubl:schema:xsd:Invoice-2::Invoice##urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0::2.1
+    expect: { status: 200, outcome: SUCCESS }
+  - id: verify-metadata-removal
+    target: phoss-smp
+    action: smp.service-metadata.get
+    with:
+      participantScheme: iso6523-actorid-upis
+      participantValue: 9915:interop-lab-stage3-metadata
+      documentScheme: busdox-docid-qns
+      documentValue: urn:oasis:names:specification:ubl:schema:xsd:Invoice-2::Invoice##urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0::2.1
+    expect: { status: 404, outcome: HTTP_ERROR }
+  - id: delete-service-group
+    target: phoss-smp
+    action: smp.service-group.delete
+    with:
+      participantScheme: iso6523-actorid-upis
+      participantValue: 9915:interop-lab-stage3-metadata
+      deleteInSml: false
+    expect: { status: 200, outcome: SUCCESS }

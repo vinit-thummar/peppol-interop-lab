@@ -60,6 +60,69 @@ class PhossAdapterTest {
   }
 
   @Test
+  void provisionsReadsAndAutomaticallyCleansUpServiceMetadata() throws Exception {
+    AtomicReference<String> stored = new AtomicReference<>();
+    List<CapturedRequest> requests = new CopyOnWriteArrayList<>();
+    try (HttpServerFixture fixture = HttpServerFixture.start(stored, requests)) {
+      Path password = output.resolve("metadata-password.txt");
+      Files.writeString(password, "correct horse", StandardCharsets.UTF_8);
+      TargetConfig target = target(fixture.endpoint(), password);
+      AdapterContext context = new AdapterContext(output, false, Map.of());
+      PhossAdapter adapter = new PhossAdapter();
+
+      assertThat(adapter.execute(target, metadataRequest("smp.service-metadata.put"), context)
+          .statusCode()).isEqualTo(200);
+      assertThat(adapter.execute(target, metadataRequest("smp.service-metadata.get"), context)
+          .body()).contains("ServiceMetadata", "urn:test:invoice::1");
+
+      adapter.cleanup(target, context);
+
+      assertThat(stored).hasNullValue();
+      assertThat(requests).extracting(CapturedRequest::method)
+          .containsExactly("GET", "PUT", "GET", "DELETE");
+      assertThat(requests.get(1).rawPath()).isEqualTo(
+          "/smp/iso6523-actorid-upis%3A%3A9915%3Ainterop-lab-stage3/services/"
+              + "busdox-docid-qns%3A%3Aurn%3Atest%3Ainvoice%3A%3A1");
+      assertThat(requests.get(1).rawQuery()).isNull();
+      assertThat(requests.get(1).body())
+          .contains(
+              "<id:ParticipantIdentifier scheme=\"iso6523-actorid-upis\">"
+                  + "9915:interop-lab-stage3</id:ParticipantIdentifier>",
+              "<id:DocumentIdentifier scheme=\"busdox-docid-qns\">"
+                  + "urn:test:invoice::1</id:DocumentIdentifier>",
+              "<id:ProcessIdentifier scheme=\"cenbii-procid-ubl\">"
+                  + "urn:test:billing</id:ProcessIdentifier>",
+              "<wsa:Address>http://127.0.0.1:8090/as4</wsa:Address>",
+              "<smp:Certificate>bGFiLWNlcnRpZmljYXRl</smp:Certificate>");
+    }
+  }
+
+  @Test
+  void acceptsCallerSuppliedServiceMetadataWithoutGeneratorParameters() throws Exception {
+    AtomicReference<String> stored = new AtomicReference<>();
+    List<CapturedRequest> requests = new CopyOnWriteArrayList<>();
+    try (HttpServerFixture fixture = HttpServerFixture.start(stored, requests)) {
+      Path password = output.resolve("custom-metadata-password.txt");
+      Files.writeString(password, "correct horse", StandardCharsets.UTF_8);
+      PhossAdapter adapter = new PhossAdapter();
+      AdapterRequest request = new AdapterRequest(
+          "smp.service-metadata.put",
+          Map.of(
+              "participantValue", "9915:interop-lab-stage3",
+              "documentValue", "urn:test:custom::1",
+              "payload", "<ServiceMetadata>caller supplied</ServiceMetadata>"),
+          Duration.ofSeconds(5));
+
+      assertThat(adapter.execute(
+          target(fixture.endpoint(), password),
+          request,
+          new AdapterContext(output, false, Map.of())).statusCode()).isEqualTo(200);
+      assertThat(requests.get(1).body())
+          .isEqualTo("<ServiceMetadata>caller supplied</ServiceMetadata>");
+    }
+  }
+
+  @Test
   void refusesToOverwriteAnExistingServiceGroup() throws Exception {
     AtomicReference<String> stored = new AtomicReference<>("existing");
     List<CapturedRequest> requests = new CopyOnWriteArrayList<>();
@@ -111,6 +174,21 @@ class PhossAdapterTest {
         Map.of(
             "participantScheme", "iso6523-actorid-upis",
             "participantValue", "9915:interop-lab-stage3"),
+        Duration.ofSeconds(5));
+  }
+
+  private static AdapterRequest metadataRequest(String action) {
+    return new AdapterRequest(
+        action,
+        Map.of(
+            "participantScheme", "iso6523-actorid-upis",
+            "participantValue", "9915:interop-lab-stage3",
+            "documentScheme", "busdox-docid-qns",
+            "documentValue", "urn:test:invoice::1",
+            "processScheme", "cenbii-procid-ubl",
+            "processValue", "urn:test:billing",
+            "endpointUrl", "http://127.0.0.1:8090/as4",
+            "certificate", "bGFiLWNlcnRpZmljYXRl"),
         Duration.ofSeconds(5));
   }
 

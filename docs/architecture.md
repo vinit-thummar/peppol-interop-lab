@@ -24,4 +24,5 @@ temporary directory and are deleted at shutdown; public certificate fingerprints
 Scenario targets are cleaned after every scenario, including failed scenarios. Adapters that create
 remote test data register it during successful provisioning and make cleanup idempotent. A cleanup
 failure is reported as a laboratory infrastructure error rather than being hidden behind the original
-contract result.
+contract result. The phoss adapter removes service metadata before service groups so cleanup respects
+the publisher API's ownership hierarchy.

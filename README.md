@@ -53,11 +53,11 @@ for how this lightweight workflow complements GITB and the official OpenPeppol T
 
 ## Stage three in progress
 
-The first stage-three slice adds a phoss SMP service-group lifecycle over its publisher REST API.
-The adapter checks that the participant does not already exist, creates it with
-`create-in-sml=false`, reads it back, and deletes it with `delete-in-sml=false`. Resources still
-present after a failed scenario are removed by the adapter lifecycle hook. Enabling either SML
-mutation flag requires the explicit `--allow-production` override.
+The phoss SMP adapter now covers service-group and service-metadata lifecycles over the publisher
+REST API. It checks that each resource does not already exist, creates it, reads it back, and removes
+it. Resources still present after a failed scenario are deleted in dependency order: service
+metadata first, then its service group. SML mutation remains disabled by default; enabling either
+service-group SML flag requires the explicit `--allow-production` override.
 
 Run the example against a local phoss SMP instance after setting its writable REST credentials:
 
@@ -66,12 +66,14 @@ export PHOSS_SMP_USERNAME='your-rest-user'
 export PHOSS_SMP_PASSWORD='your-rest-password'
 java -jar peppol-lab-cli/target/peppol-lab.jar run --no-fixtures \
   --config examples/phoss-smp/peppol-lab.yml \
-  examples/phoss-smp/service-group-lifecycle.yaml
+  examples/phoss-smp/service-metadata-lifecycle.yaml
 ```
 
-The example participant must be dedicated to the laboratory. Provisioning refuses to overwrite an
-existing service group. The next stage-three slices add service-metadata provisioning, a reusable
-phoss SMP container environment, and bring-your-own-test-certificate phoss AP flows.
+The example participant and document type must be dedicated to the laboratory. The example
+certificate is an inert base64 laboratory marker, suitable only for metadata lifecycle testing; use
+a generated or user-supplied test certificate before attempting delivery. Provisioning refuses to
+overwrite existing service groups or service metadata. The next stage-three slices add a reusable
+phoss SMP container environment and bring-your-own-test-certificate phoss AP flows.
 
 ## Build and run
 
