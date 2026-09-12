@@ -10,7 +10,11 @@ import java.util.List;
 final class BuiltinCatalog {
   static final List<String> RESOURCES = List.of(
       "/scenarios/v0.1/smp-service-group.yaml",
+      "/scenarios/v0.1/smp-identifier-encoding.yaml",
       "/scenarios/v0.1/smp-unknown-participant.yaml",
+      "/scenarios/v0.1/smp-unknown-document.yaml",
+      "/scenarios/v0.1/smp-endpoint-metadata.yaml",
+      "/scenarios/v0.1/smp-invalid-metadata.yaml",
       "/scenarios/v0.1/as4-success.yaml",
       "/scenarios/v0.1/as4-untrusted-sender.yaml",
       "/scenarios/v0.1/as4-duplicate-message-id.yaml",

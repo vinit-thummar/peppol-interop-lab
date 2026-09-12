@@ -127,7 +127,8 @@ public final class EmbeddedLab implements AutoCloseable {
       return;
     }
     if (path.contains("unknown")) {
-      respond(exchange, 404, "application/xml", "<error>participant not found</error>");
+      String resource = path.contains("/services/") ? "document" : "participant";
+      respond(exchange, 404, "application/xml", "<error>" + resource + " not found</error>");
       return;
     }
     if (path.contains("/services/")) {
@@ -144,6 +145,8 @@ public final class EmbeddedLab implements AutoCloseable {
                   <ServiceEndpointList><Endpoint transportProfile="peppol-transport-as4-v2_0">
                     <EndpointReference xmlns="http://www.w3.org/2005/08/addressing"><Address>http://127.0.0.1/as4</Address></EndpointReference>
                     <RequireBusinessLevelSignature>false</RequireBusinessLevelSignature>
+                    <ServiceActivationDate>2026-01-01T00:00:00Z</ServiceActivationDate>
+                    <ServiceExpirationDate>2099-12-31T23:59:59Z</ServiceExpirationDate>
                     <Certificate>TEFCLUNFUlQ=</Certificate>
                     <ServiceDescription>Interop Lab fixture</ServiceDescription>
                     <TechnicalContactUrl>mailto:fixture@example.invalid</TechnicalContactUrl>

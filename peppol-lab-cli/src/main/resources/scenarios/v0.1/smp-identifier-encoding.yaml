@@ -1,0 +1,19 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: smp-identifier-encoding
+  description: Encodes the complete participant identifier as one SMP path segment
+  tags: [smp, positive, identifiers, encoding]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [SMP_LOOKUP]
+steps:
+  - id: lookup-encoded-participant
+    target: smp-fixture
+    action: smp.get
+    with:
+      participantScheme: iso6523-actorid-upis
+      participantValue: "9915:receiver / encoding"
+    expect:
+      status: 200
+      outcome: SUCCESS
+      contains: [ServiceGroup, ServiceMetadataReference]
