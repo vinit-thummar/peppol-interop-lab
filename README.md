@@ -72,8 +72,27 @@ java -jar peppol-lab-cli/target/peppol-lab.jar run --no-fixtures \
 The example participant and document type must be dedicated to the laboratory. The example
 certificate is an inert base64 laboratory marker, suitable only for metadata lifecycle testing; use
 a generated or user-supplied test certificate before attempting delivery. Provisioning refuses to
-overwrite existing service groups or service metadata. The next stage-three slices add a reusable
-phoss SMP container environment and bring-your-own-test-certificate phoss AP flows.
+overwrite existing service groups or service metadata.
+
+### One-command phoss SMP laboratory
+
+The repository includes a disposable phoss SMP 8.4.3 XML environment that runs both publisher
+lifecycle scenarios and preserves their evidence locally:
+
+```bash
+./examples/phoss-smp/run-local.sh
+```
+
+The launcher selects the official amd64 or arm64 phoss SMP image for the host, creates an ephemeral
+response-signing key, waits for the backend-aware `/smp-ready` endpoint, runs the lab on an internal
+Docker network, and then removes the containers, private key, XML data volume, and temporary password
+file. The management UI is bound only to
+`http://127.0.0.1:8080`; set `PHOSS_SMP_PORT` to use a different host port. Reports remain under
+`examples/phoss-smp/reports/`.
+
+This disposable environment uses phoss SMP's documented initial administrator account solely on
+the isolated local network. It must never be exposed or reused as a production deployment. The
+next stage-three slice adds bring-your-own-test-certificate phoss AP flows.
 
 ## Build and run
 

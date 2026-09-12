@@ -133,13 +133,14 @@ public final class EmbeddedLab implements AutoCloseable {
     if (path.contains("/services/")) {
       String body = """
           <?xml version="1.0" encoding="UTF-8"?>
-          <SignedServiceMetadata xmlns="http://busdox.org/serviceMetadata/publishing/1.0/">
+          <SignedServiceMetadata xmlns="http://busdox.org/serviceMetadata/publishing/1.0/"
+                                 xmlns:id="http://busdox.org/transport/identifiers/1.0/">
             <ServiceMetadata>
               <ServiceInformation>
-                <ParticipantIdentifier scheme="iso6523-actorid-upis">9915:receiver</ParticipantIdentifier>
-                <DocumentIdentifier scheme="busdox-docid-qns">urn:oasis:names:specification:ubl:schema:xsd:Invoice-2</DocumentIdentifier>
+                <id:ParticipantIdentifier scheme="iso6523-actorid-upis">9915:receiver</id:ParticipantIdentifier>
+                <id:DocumentIdentifier scheme="busdox-docid-qns">urn:oasis:names:specification:ubl:schema:xsd:Invoice-2</id:DocumentIdentifier>
                 <ProcessList><Process>
-                  <ProcessIdentifier scheme="cenbii-procid-ubl">urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</ProcessIdentifier>
+                  <id:ProcessIdentifier scheme="cenbii-procid-ubl">urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</id:ProcessIdentifier>
                   <ServiceEndpointList><Endpoint transportProfile="peppol-transport-as4-v2_0">
                     <EndpointReference xmlns="http://www.w3.org/2005/08/addressing"><Address>http://127.0.0.1/as4</Address></EndpointReference>
                     <RequireBusinessLevelSignature>false</RequireBusinessLevelSignature>
@@ -157,8 +158,9 @@ public final class EmbeddedLab implements AutoCloseable {
     }
     String body = """
         <?xml version="1.0" encoding="UTF-8"?>
-        <ServiceGroup xmlns="http://busdox.org/serviceMetadata/publishing/1.0/">
-          <ParticipantIdentifier scheme="iso6523-actorid-upis">9915:receiver</ParticipantIdentifier>
+        <ServiceGroup xmlns="http://busdox.org/serviceMetadata/publishing/1.0/"
+                      xmlns:id="http://busdox.org/transport/identifiers/1.0/">
+          <id:ParticipantIdentifier scheme="iso6523-actorid-upis">9915:receiver</id:ParticipantIdentifier>
           <ServiceMetadataReferenceCollection>
             <ServiceMetadataReference href="/iso6523-actorid-upis%3A%3A9915%3Areceiver/services/invoice"/>
           </ServiceMetadataReferenceCollection>
