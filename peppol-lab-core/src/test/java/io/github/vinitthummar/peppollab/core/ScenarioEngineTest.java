@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -53,9 +54,78 @@ class ScenarioEngineTest {
     });
   }
 
+  @Test
+  void passesStructuredOutputsOnlyToFollowingSteps() {
+    AtomicReference<Map<String, Object>> received = new AtomicReference<>();
+    TargetAdapter adapter = new TargetAdapter() {
+      @Override public String id() { return "chain"; }
+
+      @Override public Set<Capability> capabilities(TargetConfig target) { return Set.of(); }
+
+      @Override
+      public AdapterResult execute(
+          TargetConfig target, AdapterRequest request, AdapterContext context) {
+        if ("discover".equals(request.action())) {
+          return new AdapterResult(
+              "SUCCESS", 200, "discovered", Map.of(), Duration.ZERO, List.of(),
+              Map.of("endpointUrl", "http://127.0.0.1:8081/as4", "participant", "9915:receiver"));
+        }
+        received.set(request.parameters());
+        return new AdapterResult("SUCCESS", 200, "delivered", Map.of(), Duration.ZERO, List.of());
+      }
+    };
+    Scenario scenario = scenario(List.of(
+        new ScenarioStep("discover", "target", "discover", Map.of(), expectation("discovered")),
+        new ScenarioStep(
+            "deliver",
+            "target",
+            "deliver",
+            Map.of(
+                "endpointUrl", "${steps.discover.outputs.endpointUrl}",
+                "recipient", "urn:test:${steps.discover.outputs.participant}"),
+            expectation("delivered"))));
+
+    RunReport report = run(adapter, scenario);
+
+    assertThat(report.passed()).isOne();
+    assertThat(received.get()).containsEntry("endpointUrl", "http://127.0.0.1:8081/as4")
+        .containsEntry("recipient", "urn:test:9915:receiver");
+  }
+
+  @Test
+  void checksProductionGuardAfterOutputResolution() {
+    AtomicBoolean secondStepCalled = new AtomicBoolean();
+    TargetAdapter adapter = new TargetAdapter() {
+      @Override public String id() { return "chain"; }
+
+      @Override public Set<Capability> capabilities(TargetConfig target) { return Set.of(); }
+
+      @Override
+      public AdapterResult execute(
+          TargetConfig target, AdapterRequest request, AdapterContext context) {
+        if ("discover".equals(request.action())) {
+          return new AdapterResult(
+              "SUCCESS", 200, "discovered", Map.of(), Duration.ZERO, List.of(),
+              Map.of("endpointUrl", "https://smp.prod.tech.peppol.org/as4"));
+        }
+        secondStepCalled.set(true);
+        return new AdapterResult("SUCCESS", 200, "delivered", Map.of(), Duration.ZERO, List.of());
+      }
+    };
+    Scenario scenario = scenario(List.of(
+        new ScenarioStep("discover", "target", "discover", Map.of(), expectation("discovered")),
+        new ScenarioStep(
+            "deliver", "target", "deliver",
+            Map.of("endpointUrl", "${steps.discover.outputs.endpointUrl}"), expectation("delivered"))));
+
+    RunReport report = run(adapter, scenario);
+
+    assertThat(report.errors()).isOne();
+    assertThat(secondStepCalled).isFalse();
+    assertThat(report.scenarios().getFirst().message()).contains("--allow-production");
+  }
+
   private RunReport run(TargetAdapter adapter) {
-    AdapterRegistry registry = new AdapterRegistry().register(adapter);
-    TargetConfig target = new TargetConfig("test", URI.create("http://127.0.0.1"), Map.of());
     Scenario scenario = new Scenario(
         Scenario.API_VERSION,
         "Scenario",
@@ -68,11 +138,31 @@ class ScenarioEngineTest {
             "test.execute",
             Map.of(),
             new StepExpectation(200, "SUCCESS", List.of("required"), List.of(), Map.of(), null))));
+    return run(adapter, scenario);
+  }
+
+  private RunReport run(TargetAdapter adapter, Scenario scenario) {
+    AdapterRegistry registry = new AdapterRegistry().register(adapter);
+    TargetConfig target = new TargetConfig(adapter.id(), URI.create("http://127.0.0.1"), Map.of());
     return new ScenarioEngine(
         new LabConfig(Map.of("target", target)),
         registry,
         new AdapterContext(output, false, Map.of()))
         .run(List.of(scenario));
+  }
+
+  private static Scenario scenario(List<ScenarioStep> steps) {
+    return new Scenario(
+        Scenario.API_VERSION,
+        "Scenario",
+        new ScenarioMetadata("output-chain", "output chain", List.of("route-proof")),
+        new SpecificationVersions("1.4.0", "2.0.3", "2.0.2"),
+        List.of(),
+        steps);
+  }
+
+  private static StepExpectation expectation(String body) {
+    return new StepExpectation(200, "SUCCESS", List.of(body), List.of(), Map.of(), null);
   }
 
   private static TargetAdapter adapter(AtomicBoolean cleaned, boolean failCleanup) {

@@ -3,6 +3,7 @@ package io.github.vinitthummar.peppollab.adapters;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.vinitthummar.peppollab.api.AdapterContext;
 import io.github.vinitthummar.peppollab.api.AdapterException;
@@ -42,5 +43,22 @@ class DnsAdapterTest {
         () -> adapter.execute(target, request, new AdapterContext(Path.of("reports"), false, Map.of())));
     assertFalse(blocked.isInfrastructureFailure());
     assertTrue(blocked.getMessage().contains("--allow-production"));
+  }
+
+  @Test
+  void exposesTheSmpUrlAsAStructuredOutput() throws Exception {
+    URI smp = URI.create("http://127.0.0.1:8181");
+    try (DnsFixture fixture = DnsFixture.start(smp)) {
+      var result = new DnsAdapter().execute(
+          new TargetConfig("dns", fixture.endpoint(), Map.of()),
+          new AdapterRequest(
+              "dns.lookup", Map.of("name", "ok.sml.test", "type", "NAPTR"),
+              Duration.ofSeconds(1)),
+          new AdapterContext(Path.of("reports"), false, Map.of()));
+
+      assertThat(result.outputs())
+          .containsEntry("smpBaseUrl", smp.toString())
+          .containsEntry("rcode", "NOERROR");
+    }
   }
 }

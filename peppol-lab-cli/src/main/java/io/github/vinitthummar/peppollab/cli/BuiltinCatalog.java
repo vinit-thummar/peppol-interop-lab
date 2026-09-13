@@ -27,7 +27,8 @@ final class BuiltinCatalog {
       "/scenarios/v0.1/dns-nxdomain.yaml",
       "/scenarios/v0.1/dns-servfail.yaml",
       "/scenarios/v0.1/dns-delay.yaml",
-      "/scenarios/v0.1/dns-timeout.yaml");
+      "/scenarios/v0.1/dns-timeout.yaml",
+      "/scenarios/v0.1/peppol-route-proof.yaml");
 
   private BuiltinCatalog() {}
 

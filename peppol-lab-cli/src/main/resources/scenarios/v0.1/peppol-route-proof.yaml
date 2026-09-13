@@ -1,0 +1,47 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: peppol-route-proof
+  description: Discovers an SMP through DNS and delivers AS4 using only the endpoint and certificate published by that SMP
+  tags: [dns, smp, as4, positive, route-proof]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [DNS_LOOKUP, SMP_LOOKUP, AS4_SEND, EVIDENCE]
+steps:
+  - id: discover-smp
+    target: dns-fixture
+    action: dns.lookup
+    with:
+      name: ok.sml.test
+      type: NAPTR
+      tcp: true
+    expect:
+      outcome: SUCCESS
+      headers: { DNS-Rcode: NOERROR }
+  - id: retrieve-metadata
+    target: smp-fixture
+    action: smp.get
+    with:
+      baseUrl: ${steps.discover-smp.outputs.smpBaseUrl}
+      participantScheme: iso6523-actorid-upis
+      participantValue: "9915:receiver"
+      documentScheme: busdox-docid-qns
+      documentValue: "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+    expect:
+      status: 200
+      outcome: SUCCESS
+      contains: [peppol-transport-as4-v2_0]
+  - id: deliver-as4
+    target: as4-fixture
+    action: as4.send
+    with:
+      endpointUrl: ${steps.retrieve-metadata.outputs.endpointUrl}
+      receiverCertificateBase64: ${steps.retrieve-metadata.outputs.receiverCertificateBase64}
+      messageId: route-proof-001@interop-lab
+      receiver: POP000002
+      finalRecipient: ${steps.retrieve-metadata.outputs.participantIdentifier}
+      documentType: ${steps.retrieve-metadata.outputs.documentIdentifier}
+      process: ${steps.retrieve-metadata.outputs.processIdentifier}
+    expect:
+      status: 200
+      outcome: SUCCESS
+      contains: [SignalMessage, Receipt, receiver-observed]

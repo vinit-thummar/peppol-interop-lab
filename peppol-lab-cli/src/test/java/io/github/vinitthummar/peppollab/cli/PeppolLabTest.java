@@ -75,8 +75,12 @@ class PeppolLabTest {
             "dns-naptr-success",
             "dns-nxdomain",
             "dns-servfail",
-            "dns-controlled-timeout")
-        .doesNotContain("pki-password", ".p12", "PRIVATE KEY");
+            "dns-controlled-timeout",
+            "peppol-route-proof",
+            "receiverCertificateSha256",
+            "payloadSha256")
+        .doesNotContain(
+            "receiverCertificateBase64", "pki-password", ".p12", "PRIVATE KEY");
   }
 
   @Test

@@ -7,6 +7,8 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
+import java.security.cert.CertificateEncodingException;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.ServiceLoader;
@@ -143,11 +145,11 @@ public final class EmbeddedLab implements AutoCloseable {
                 <ProcessList><Process>
                   <id:ProcessIdentifier scheme="cenbii-procid-ubl">urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</id:ProcessIdentifier>
                   <ServiceEndpointList><Endpoint transportProfile="peppol-transport-as4-v2_0">
-                    <EndpointReference xmlns="http://www.w3.org/2005/08/addressing"><Address>http://127.0.0.1/as4</Address></EndpointReference>
+                    <EndpointReference xmlns="http://www.w3.org/2005/08/addressing"><Address>%s</Address></EndpointReference>
                     <RequireBusinessLevelSignature>false</RequireBusinessLevelSignature>
                     <ServiceActivationDate>2026-01-01T00:00:00Z</ServiceActivationDate>
                     <ServiceExpirationDate>2099-12-31T23:59:59Z</ServiceExpirationDate>
-                    <Certificate>TEFCLUNFUlQ=</Certificate>
+                    <Certificate>%s</Certificate>
                     <ServiceDescription>Interop Lab fixture</ServiceDescription>
                     <TechnicalContactUrl>mailto:fixture@example.invalid</TechnicalContactUrl>
                   </Endpoint></ServiceEndpointList>
@@ -155,7 +157,7 @@ public final class EmbeddedLab implements AutoCloseable {
               </ServiceInformation>
             </ServiceMetadata>
           </SignedServiceMetadata>
-          """;
+          """.formatted(as4.endpoint(), receiverCertificateBase64());
       respond(exchange, 200, "application/xml", body);
       return;
     }
@@ -170,6 +172,14 @@ public final class EmbeddedLab implements AutoCloseable {
         </ServiceGroup>
         """;
     respond(exchange, 200, "application/xml", body);
+  }
+
+  private String receiverCertificateBase64() throws IOException {
+    try {
+      return Base64.getEncoder().encodeToString(pki.receiverCertificate().getEncoded());
+    } catch (CertificateEncodingException ex) {
+      throw new IOException("Unable to encode fixture receiver certificate", ex);
+    }
   }
 
   private static void respond(HttpExchange exchange, int status, String contentType, String body)
