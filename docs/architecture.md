@@ -2,8 +2,8 @@
 
 ```text
 scenario YAML ──> validator ──> execution engine ──> TargetAdapter SPI
-                                      │                    ├─ DNS wire
-                                      │                    ├─ standard SMP
+                                      │       ▲            ├─ DNS wire
+                                      │       └─ outputs ───├─ standard SMP
                                       │                    ├─ direct AS4
                                       │                    └─ phoss
                                       │
@@ -15,6 +15,18 @@ scenario YAML ──> validator ──> execution engine ──> TargetAdapter S
 The core knows no vendor APIs. A scenario names a target from `peppol-lab.yml`; that target selects an
 adapter. The engine checks declared capabilities before executing steps, applies the production guard,
 and evaluates only observable results.
+
+Adapters may return immutable string outputs for later steps. References use the constrained form
+`${steps.<preceding-id>.outputs.<name>}`; there is no expression evaluator or scripting runtime.
+Validation rejects duplicate IDs, malformed expressions, and references to the current or a future
+step. The engine resolves references immediately before execution and reapplies the production guard
+to every resulting absolute HTTP(S) URI. An unavailable output is an infrastructure error, never an
+empty value or implicit pass.
+
+The bundled Route Proof demonstrates the intended boundary: DNS supplies the SMP base URL, SMP
+supplies the AS4 endpoint and receiver certificate, and the direct AS4 adapter sends only to those
+discovered values. The fixture publishes its actual random ports and per-run public certificate, so
+the contract cannot pass through a separately hardcoded delivery route.
 
 Adapters receive secrets by reference. They must not put authorization values, private keys, or full
 business payloads in evidence. Built-in fixtures listen on `127.0.0.1` with operating-system-assigned

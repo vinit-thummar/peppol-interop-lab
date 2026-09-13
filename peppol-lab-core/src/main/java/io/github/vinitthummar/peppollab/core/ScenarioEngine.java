@@ -5,9 +5,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 public final class ScenarioEngine {
@@ -46,34 +48,47 @@ public final class ScenarioEngine {
     }
 
     List<StepRunResult> steps = new ArrayList<>();
+    Map<String, Map<String, String>> outputsByStep = new LinkedHashMap<>();
     ScenarioStatus scenarioStatus = ScenarioStatus.PASSED;
     String message = "All expectations passed";
     for (ScenarioStep step : scenario.steps()) {
       TargetConfig target = requireTarget(step.target());
       TargetAdapter adapter = adapters.require(target.adapter());
       try {
-        long timeoutMs = number(step.with().get("timeoutMs"), 10_000L);
+        Map<String, Object> parameters = StepOutputReferences.resolve(step.with(), outputsByStep);
+        guardDynamicUris(parameters);
+        long timeoutMs = number(parameters.get("timeoutMs"), 10_000L);
         AdapterResult actual = adapter.execute(
-            target, new AdapterRequest(step.action(), step.with(), Duration.ofMillis(timeoutMs)), context);
+            target, new AdapterRequest(step.action(), parameters, Duration.ofMillis(timeoutMs)), context);
         if ("SKIPPED".equalsIgnoreCase(actual.outcome())) {
-          steps.add(new StepRunResult(step.id(), ScenarioStatus.SKIPPED, actual.body(), actual, List.of()));
+          steps.add(new StepRunResult(
+              step.id(), ScenarioStatus.SKIPPED, actual.body(), reportSafe(actual), List.of()));
           scenarioStatus = ScenarioStatus.SKIPPED;
           message = actual.body();
           break;
         }
         List<String> failures = assertResult(step.expect(), actual);
         ScenarioStatus status = failures.isEmpty() ? ScenarioStatus.PASSED : ScenarioStatus.FAILED;
-        steps.add(new StepRunResult(step.id(), status,
-            failures.isEmpty() ? "Expectations passed" : String.join("; ", failures), actual, failures));
+        steps.add(new StepRunResult(
+            step.id(), status,
+            failures.isEmpty() ? "Expectations passed" : String.join("; ", failures),
+            reportSafe(actual), failures));
         if (!failures.isEmpty()) {
           scenarioStatus = ScenarioStatus.FAILED;
           message = "Step '" + step.id() + "' failed";
           break;
         }
+        outputsByStep.put(step.id(), actual.outputs());
       } catch (AdapterException ex) {
         ScenarioStatus status = ex.isInfrastructureFailure() ? ScenarioStatus.ERROR : ScenarioStatus.FAILED;
         steps.add(new StepRunResult(step.id(), status, ex.getMessage(), null, List.of(ex.getMessage())));
         scenarioStatus = status;
+        message = ex.getMessage();
+        break;
+      } catch (IllegalArgumentException ex) {
+        steps.add(new StepRunResult(
+            step.id(), ScenarioStatus.ERROR, ex.getMessage(), null, List.of(ex.getMessage())));
+        scenarioStatus = ScenarioStatus.ERROR;
         message = ex.getMessage();
         break;
       }
@@ -136,6 +151,41 @@ public final class ScenarioEngine {
       return java.net.URI.create(value);
     }
     return uri;
+  }
+
+  private void guardDynamicUris(Object value) {
+    if (value instanceof String string) {
+      try {
+        java.net.URI uri = java.net.URI.create(string);
+        if (uri.isAbsolute() && Set.of("http", "https").contains(uri.getScheme().toLowerCase(Locale.ROOT))) {
+          ProductionGuard.check(uri, context.allowProduction());
+        }
+      } catch (IllegalArgumentException ex) {
+        if (string.startsWith("http://") || string.startsWith("https://")) throw ex;
+      }
+    } else if (value instanceof Map<?, ?> map) {
+      map.values().forEach(this::guardDynamicUris);
+    } else if (value instanceof List<?> list) {
+      list.forEach(this::guardDynamicUris);
+    }
+  }
+
+  private static AdapterResult reportSafe(AdapterResult result) {
+    Map<String, String> outputs = result.outputs().entrySet().stream()
+        .filter(entry -> !isRuntimeOnlyOutput(entry.getKey()))
+        .collect(java.util.stream.Collectors.toUnmodifiableMap(
+            Map.Entry::getKey, Map.Entry::getValue));
+    return new AdapterResult(
+        result.outcome(), result.statusCode(), result.body(), result.headers(), result.duration(),
+        result.evidence(), outputs);
+  }
+
+  private static boolean isRuntimeOnlyOutput(String name) {
+    String normalized = name.toLowerCase(Locale.ROOT);
+    return normalized.contains("privatekey")
+        || normalized.contains("password")
+        || normalized.contains("secret")
+        || normalized.endsWith("certificatebase64");
   }
 
   private static long number(Object value, long fallback) {

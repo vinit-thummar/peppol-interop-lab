@@ -15,6 +15,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -22,6 +23,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.xbill.DNS.DClass;
 import org.xbill.DNS.Message;
+import org.xbill.DNS.NAPTRRecord;
 import org.xbill.DNS.Name;
 import org.xbill.DNS.Rcode;
 import org.xbill.DNS.Record;
@@ -112,6 +114,19 @@ public final class DnsAdapter implements TargetAdapter {
       String body = response.getSection(Section.ANSWER).stream()
           .map(Record::toString)
           .collect(Collectors.joining("\n"));
+      Map<String, String> outputs = new LinkedHashMap<>();
+      outputs.put("queryName", absoluteName.toString());
+      outputs.put("recordType", typeName);
+      outputs.put("rcode", Rcode.string(rcode));
+      response.getSection(Section.ANSWER).stream()
+          .filter(NAPTRRecord.class::isInstance)
+          .map(NAPTRRecord.class::cast)
+          .filter(record -> "Meta:SMP".equalsIgnoreCase(record.getService().toString()))
+          .map(NAPTRRecord::getRegexp)
+          .map(DnsAdapter::naptrReplacement)
+          .filter(value -> value != null && !value.isBlank())
+          .findFirst()
+          .ifPresent(value -> outputs.put("smpBaseUrl", value));
       Evidence evidence = new Evidence(
           "dns.exchange",
           Instant.now(),
@@ -128,7 +143,8 @@ public final class DnsAdapter implements TargetAdapter {
           body,
           Map.of("DNS-Rcode", Rcode.string(rcode)),
           duration,
-          List.of(evidence));
+          List.of(evidence),
+          outputs);
     } catch (IOException ex) {
       if (ex instanceof InterruptedIOException && Thread.currentThread().isInterrupted()) {
         Thread.currentThread().interrupt();
@@ -149,6 +165,16 @@ public final class DnsAdapter implements TargetAdapter {
     } catch (Exception ex) {
       throw new AdapterException("DNS lookup failed: " + ex.getMessage(), ex, true);
     }
+  }
+
+  private static String naptrReplacement(String regexp) {
+    if (regexp == null || regexp.length() < 4) return null;
+    char separator = regexp.charAt(0);
+    int patternEnd = regexp.indexOf(separator, 1);
+    if (patternEnd < 0) return null;
+    int replacementEnd = regexp.indexOf(separator, patternEnd + 1);
+    if (replacementEnd < 0) return null;
+    return regexp.substring(patternEnd + 1, replacementEnd);
   }
 
   private static boolean isTimeout(Throwable failure) {

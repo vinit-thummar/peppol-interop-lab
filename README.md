@@ -20,12 +20,15 @@ See the [official eDelivery specification catalogue](https://docs.peppol.eu/edel
 - `init`, `doctor`, `validate`, `list`, and `run` CLI commands.
 - Public Java adapter SPI discovered through `ServiceLoader`.
 - Standard SMP HTTP, direct phase4 AS4, and phoss control-plane adapters.
+- Safe dataflow between scenario steps through validated structured-output references.
 - Loopback-only deterministic SMP, DNS, and phase4 AS4 fixtures.
 - Six deterministic SMP contracts covering discovery, identifier encoding, missing resources,
   endpoint metadata, and malformed metadata.
-- Six AS4 contracts covering delivery, receiver-observed routing identifiers, trust rejection,
+- Seven AS4 contracts covering delivery, receiver-observed routing identifiers, trust rejection,
   payload integrity, duplicate identifiers, and controlled peer failure.
 - Bounded SMP, DNS, and AS4 timeout/resilience scenarios.
+- A chained Route Proof that discovers the SMP through DNS and delivers to the AS4 endpoint and
+  receiver certificate published by that SMP.
 - Console, JSON, and JUnit XML results with stable exit codes.
 - Production-domain guard and environment/file-only secret references.
 
@@ -38,6 +41,33 @@ payload. A controlled in-transit bit flip after signing and encryption also veri
 ciphertext is rejected before delivery, while a separate ephemeral CA proves that an untrusted
 sender certificate cannot reach payload processing. These are deterministic preflight contracts,
 not a claim of OpenPeppol conformance or accreditation.
+
+## Peppol Route Proof
+
+The `peppol-route-proof` scenario exercises one connected delivery path:
+
+```text
+DNS NAPTR -> SMP service metadata -> discovered AS4 endpoint/certificate -> signed receipt
+```
+
+The DNS adapter exports the discovered SMP URL. The SMP adapter then exports the selected endpoint,
+transport profile, participant, document, process, certificate fingerprint, and receiver
+certificate. The AS4 step consumes those outputs rather than a separately configured delivery
+address or receiver identity. The final result correlates the transmitted message identifier,
+receipt identifier, payload digest, and receiver observation.
+
+Scenario parameters can reference only an earlier step using this non-executable syntax:
+
+```yaml
+endpointUrl: ${steps.retrieve-metadata.outputs.endpointUrl}
+receiverCertificateBase64: ${steps.retrieve-metadata.outputs.receiverCertificateBase64}
+```
+
+Duplicate step IDs, malformed expressions, self-references, and forward references fail validation.
+Missing runtime outputs fail the scenario as a laboratory error. Dynamically resolved HTTP targets
+are checked by the production-domain guard immediately before adapter execution. Runtime-only
+certificate values are withheld from the structured outputs written to reports; their SHA-256
+fingerprints remain available as evidence.
 
 ## Stage two complete
 
@@ -105,6 +135,13 @@ This disposable environment uses phoss SMP's documented initial administrator ac
 the isolated local network. It must never be exposed or reused as a production deployment. The
 phoss AP example remains opt-in because the AP intentionally requires a correctly configured
 official Peppol test identity and trust chain; the laboratory never bundles those credentials.
+
+## Stage four foundation: connected route evidence
+
+The first stage-four slice adds structured adapter outputs and deterministic step-to-step dataflow.
+The bundled Route Proof now performs a real local DNS-to-SMP-to-AS4 traversal, with the SMP fixture
+publishing its runtime AS4 port and per-run receiver certificate. Future slices will add hop-specific
+negative route contracts and a compact route summary suitable for debugging multi-vendor deployments.
 
 ## Build and run
 

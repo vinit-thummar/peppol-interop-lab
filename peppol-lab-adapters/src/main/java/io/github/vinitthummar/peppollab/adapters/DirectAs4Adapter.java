@@ -32,12 +32,14 @@ import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -107,8 +109,9 @@ public final class DirectAs4Adapter implements TargetAdapter {
       return AdapterResult.skipped("Unsupported AS4 action: " + request.action());
     }
 
+    String endpointUrl = AdapterSupport.parameter(request.parameters(), "endpointUrl", null);
     String path = AdapterSupport.parameter(request.parameters(), "path", "/as4/accept");
-    URI endpoint = AdapterSupport.resolve(target, path);
+    URI endpoint = endpointUrl == null ? AdapterSupport.resolve(target, path) : URI.create(endpointUrl);
     if (path.contains("mode=error")) return sendControlledFailureProbe(endpoint, request.timeout());
 
     String messageId = AdapterSupport.parameter(
@@ -138,15 +141,20 @@ public final class DirectAs4Adapter implements TargetAdapter {
         target, context, "senderKeyPassword", "fixture:pki-password");
     String trustReference = setting(
         target, context, "trustCertificate", "fixture:pki-ca");
-    String receiverCertificateReference = setting(
-        target, context, "receiverCertificate", "fixture:pki-receiver-cert");
+    String receiverCertificateBase64 = AdapterSupport.parameter(
+        request.parameters(), "receiverCertificateBase64", null);
+    String receiverCertificateReference = receiverCertificateBase64 == null
+        ? setting(target, context, "receiverCertificate", "fixture:pki-receiver-cert")
+        : null;
     String keyAlias = target.options().getOrDefault("senderKeyAlias", "sender");
 
     char[] password = AdapterSupport.secret(passwordReference).toCharArray();
     try (Phase4GlobalScope ignored = Phase4GlobalScope.open();
          EphemeralPhase4CryptoFactory cryptoFactory = EphemeralPhase4CryptoFactory.load(
              path(keyStoreReference), keyAlias, password, certificate(path(trustReference)))) {
-      X509Certificate receiverCertificate = certificate(path(receiverCertificateReference));
+      X509Certificate receiverCertificate = receiverCertificateBase64 == null
+          ? certificate(path(receiverCertificateReference))
+          : certificate(Base64.getDecoder().decode(receiverCertificateBase64.replaceAll("\\s+", "")));
       PMode pmode = PeppolPMode.createPeppolPMode(
           sender,
           receiver,
@@ -200,6 +208,7 @@ public final class DirectAs4Adapter implements TargetAdapter {
           receiptValidation,
           signalMessage.get(),
           messageId,
+          payload,
           started);
       return "SUCCESS".equals(result.outcome())
           ? collectReceiverEvidence(target, request.timeout(), messageId, result)
@@ -251,7 +260,8 @@ public final class DirectAs4Adapter implements TargetAdapter {
         result.body() + "; receiver-observed " + observation.body().replace('\n', ' ').trim(),
         result.headers(),
         result.duration(),
-        evidence);
+        evidence,
+        result.outputs());
   }
 
   private static HttpClientSettings httpSettings(Duration duration) {
@@ -268,6 +278,7 @@ public final class DirectAs4Adapter implements TargetAdapter {
       StrictReceiptValidation validation,
       Ebms3SignalMessage signal,
       String messageId,
+      String payload,
       Instant started) {
     Duration duration = Duration.between(started, Instant.now());
     if (sendResult.isSuccess() && signal != null) {
@@ -291,7 +302,11 @@ public final class DirectAs4Adapter implements TargetAdapter {
                 "profile", "peppol-as4-2.0.3",
                 "signed", true,
                 "encrypted", true,
-                "receiptReferencesVerified", true))));
+                "receiptReferencesVerified", true))),
+            Map.of(
+                "messageId", messageId,
+                "receiptMessageId", receiptId,
+                "payloadSha256", sha256(payload)));
       }
     }
 
@@ -322,6 +337,25 @@ public final class DirectAs4Adapter implements TargetAdapter {
             "phase4Result", sendResult.getID(),
             "ebmsErrors", ebmsErrors,
             "receiptReferencesVerified", false))));
+  }
+
+  private static X509Certificate certificate(byte[] encoded)
+      throws GeneralSecurityException {
+    try (InputStream input = new java.io.ByteArrayInputStream(encoded)) {
+      return (X509Certificate) CertificateFactory.getInstance("X.509")
+          .generateCertificate(input);
+    } catch (IOException ex) {
+      throw new GeneralSecurityException("Unable to read receiver certificate", ex);
+    }
+  }
+
+  private static String sha256(String value) {
+    try {
+      return java.util.HexFormat.of().formatHex(
+          MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+    } catch (GeneralSecurityException ex) {
+      throw new IllegalStateException("SHA-256 is unavailable", ex);
+    }
   }
 
   private static List<String> signalErrors(Ebms3SignalMessage signal) {

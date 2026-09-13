@@ -12,8 +12,10 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class ScenarioLoader {
   private final ObjectMapper yaml =
@@ -69,6 +71,7 @@ public final class ScenarioLoader {
         violations.add(source + ": specifications are required");
       }
       if (scenario.steps().isEmpty()) violations.add(source + ": at least one step is required");
+      Set<String> precedingStepIds = new HashSet<>();
       for (int i = 0; i < scenario.steps().size(); i++) {
         ScenarioStep step = scenario.steps().get(i);
         String prefix = source + ": steps[" + i + "]";
@@ -76,10 +79,24 @@ public final class ScenarioLoader {
           violations.add(prefix + " must not be null");
           continue;
         }
-        if (blank(step.id())) violations.add(prefix + ".id is required");
+        if (blank(step.id())) {
+          violations.add(prefix + ".id is required");
+        } else if (precedingStepIds.contains(step.id())) {
+          violations.add(prefix + ".id must be unique; duplicate '" + step.id() + "'");
+        }
         if (blank(step.target())) violations.add(prefix + ".target is required");
         if (blank(step.action())) violations.add(prefix + ".action is required");
         if (step.expect() == null) violations.add(prefix + ".expect is required");
+        if (StepOutputReferences.hasMalformedReference(step.with())) {
+          violations.add(prefix + " contains a malformed step-output reference");
+        }
+        for (StepOutputReferences.Reference reference : StepOutputReferences.findAll(step.with())) {
+          if (!precedingStepIds.contains(reference.stepId())) {
+            violations.add(prefix + " references step '" + reference.stepId()
+                + "', but outputs may only come from a preceding step");
+          }
+        }
+        if (!blank(step.id())) precedingStepIds.add(step.id());
       }
     }
     if (!violations.isEmpty()) throw new ScenarioValidationException(violations);

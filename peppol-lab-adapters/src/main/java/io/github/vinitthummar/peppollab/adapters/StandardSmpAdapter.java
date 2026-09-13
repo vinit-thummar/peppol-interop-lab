@@ -2,12 +2,19 @@ package io.github.vinitthummar.peppollab.adapters;
 
 import io.github.vinitthummar.peppollab.api.*;
 import java.io.ByteArrayInputStream;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.cert.CertificateFactory;
 import java.time.Duration;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -34,7 +41,10 @@ public final class StandardSmpAdapter implements TargetAdapter {
       throws AdapterException {
     if (!"smp.get".equals(request.action())) return AdapterResult.skipped("Unsupported SMP action: " + request.action());
     String path = lookupPath(request);
-    HttpRequest httpRequest = HttpRequest.newBuilder(AdapterSupport.resolve(target, path))
+    URI baseUrl = URI.create(AdapterSupport.parameter(
+        request.parameters(), "baseUrl", target.baseUrl().toString()));
+    HttpRequest httpRequest = HttpRequest.newBuilder(AdapterSupport.resolve(
+            new TargetConfig(target.adapter(), baseUrl, target.options()), path))
         .timeout(request.timeout()).header("Accept", "application/xml").GET().build();
     AdapterResult result = AdapterSupport.send(client, httpRequest);
     return successful(result) ? validateMetadata(result) : result;
@@ -82,10 +92,54 @@ public final class StandardSmpAdapter implements TargetAdapter {
       if (!PEPPOL_SMP_NAMESPACE.equals(namespace)) {
         return invalid(result, "Unexpected SMP document namespace '" + namespace + "'");
       }
-      return result;
+      return withOutputs(result, document);
     } catch (Exception ex) {
       return invalid(result, "Malformed SMP XML: " + ex.getMessage());
     }
+  }
+
+  private static AdapterResult withOutputs(AdapterResult result, org.w3c.dom.Document document)
+      throws Exception {
+    Map<String, String> outputs = new LinkedHashMap<>();
+    copyFirst(document, outputs, "ParticipantIdentifier", "participantIdentifier");
+    copyFirst(document, outputs, "DocumentIdentifier", "documentIdentifier");
+    copyFirst(document, outputs, "ProcessIdentifier", "processIdentifier");
+    copyFirst(document, outputs, "Address", "endpointUrl");
+    copyFirst(document, outputs, "ServiceActivationDate", "serviceActivationDate");
+    copyFirst(document, outputs, "ServiceExpirationDate", "serviceExpirationDate");
+
+    var endpoints = document.getElementsByTagNameNS(PEPPOL_SMP_NAMESPACE, "Endpoint");
+    if (endpoints.getLength() > 0) {
+      String profile = ((org.w3c.dom.Element) endpoints.item(0)).getAttribute("transportProfile");
+      if (!profile.isBlank()) outputs.put("transportProfile", profile);
+    }
+
+    String certificate = firstText(document, "Certificate");
+    if (certificate != null) {
+      String normalized = certificate.replaceAll("\\s+", "");
+      byte[] encoded = Base64.getDecoder().decode(normalized);
+      CertificateFactory.getInstance("X.509")
+          .generateCertificate(new ByteArrayInputStream(encoded));
+      outputs.put("receiverCertificateBase64", normalized);
+      outputs.put("receiverCertificateSha256", HexFormat.of().formatHex(
+          MessageDigest.getInstance("SHA-256").digest(encoded)));
+    }
+    return new AdapterResult(
+        result.outcome(), result.statusCode(), result.body(), result.headers(), result.duration(),
+        result.evidence(), outputs);
+  }
+
+  private static void copyFirst(
+      org.w3c.dom.Document document, Map<String, String> outputs, String element, String output) {
+    String value = firstText(document, element);
+    if (value != null) outputs.put(output, value);
+  }
+
+  private static String firstText(org.w3c.dom.Document document, String localName) {
+    var elements = document.getElementsByTagNameNS("*", localName);
+    if (elements.getLength() == 0) return null;
+    String value = elements.item(0).getTextContent();
+    return value == null || value.isBlank() ? null : value.strip();
   }
 
   private static AdapterResult invalid(AdapterResult result, String reason) {
