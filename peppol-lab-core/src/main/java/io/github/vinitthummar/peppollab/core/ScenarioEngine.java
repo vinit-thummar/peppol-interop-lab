@@ -195,6 +195,6 @@ public final class ScenarioEngine {
   private static ScenarioRunResult result(Scenario scenario, ScenarioStatus status, String message,
       Instant started, List<StepRunResult> steps) {
     return new ScenarioRunResult(scenario.metadata().name(), status, message,
-        Duration.between(started, Instant.now()), steps);
+        Duration.between(started, Instant.now()), steps, scenario.metadata().tags());
   }
 }

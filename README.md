@@ -29,6 +29,8 @@ See the [official eDelivery specification catalogue](https://docs.peppol.eu/edel
 - Bounded SMP, DNS, and AS4 timeout/resilience scenarios.
 - A chained Route Proof that discovers the SMP through DNS and delivers to the AS4 endpoint and
   receiver certificate published by that SMP.
+- Hop-specific Route Proof failures for DNS absence, missing participants, malformed SMP metadata,
+  and a failing discovered AS4 endpoint.
 - Console, JSON, and JUnit XML results with stable exit codes.
 - Production-domain guard and environment/file-only secret references.
 
@@ -175,6 +177,7 @@ The built-in run starts isolated loopback fixtures on random ports and writes:
 
 - `reports/results.json`
 - `reports/junit.xml`
+- `reports/route-summary.json` and `reports/route-summary.txt`
 - `reports/pki/certificates.json` and public PEM certificates
 - `reports/pki/untrusted/certificates.json` and rejected identity public PEM certificates
 

@@ -1,0 +1,35 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: route-as4-http-failure
+  description: Reaches the AS4 endpoint discovered through DNS and SMP and preserves its controlled failure
+  tags: [dns, smp, as4, negative, route-proof, resilience]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [DNS_LOOKUP, SMP_LOOKUP, AS4_SEND, EVIDENCE]
+steps:
+  - id: discover-smp
+    target: dns-fixture
+    action: dns.lookup
+    with: { name: ok.sml.test, type: NAPTR }
+    expect: { status: 0, outcome: SUCCESS }
+  - id: retrieve-metadata
+    target: smp-fixture
+    action: smp.get
+    with:
+      baseUrl: ${steps.discover-smp.outputs.smpBaseUrl}
+      participantScheme: iso6523-actorid-upis
+      participantValue: "9915:receiver"
+      documentScheme: busdox-docid-qns
+      documentValue: "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+    expect: { status: 200, outcome: SUCCESS }
+  - id: deliver-as4
+    target: as4-fixture
+    action: as4.send
+    with:
+      endpointUrl: ${steps.retrieve-metadata.outputs.endpointUrl}?mode=error
+      path: /as4/accept?mode=error
+      messageId: route-failure-001@interop-lab
+    expect:
+      status: 500
+      outcome: HTTP_ERROR
+      contains: [EBMS:0004, controlled failure]

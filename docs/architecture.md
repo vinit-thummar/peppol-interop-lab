@@ -28,6 +28,11 @@ supplies the AS4 endpoint and receiver certificate, and the direct AS4 adapter s
 discovered values. The fixture publishes its actual random ports and per-run public certificate, so
 the contract cannot pass through a separately hardcoded delivery route.
 
+Scenarios tagged `route-proof` also produce a machine-readable `route-summary.json` and a compact
+`route-summary.txt`. Each summary separates contract status from the observed protocol outcome. A
+negative scenario therefore passes when the expected route failure is preserved, while still naming
+the DNS, SMP, or AS4 hop where delivery stopped.
+
 Adapters receive secrets by reference. They must not put authorization values, private keys, or full
 business payloads in evidence. Built-in fixtures listen on `127.0.0.1` with operating-system-assigned
 ports and exist only for the duration of a run. Generated PKCS#12 stores stay in an owner-only

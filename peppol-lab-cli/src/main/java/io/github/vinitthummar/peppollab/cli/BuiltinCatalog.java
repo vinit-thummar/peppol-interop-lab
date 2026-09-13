@@ -28,7 +28,11 @@ final class BuiltinCatalog {
       "/scenarios/v0.1/dns-servfail.yaml",
       "/scenarios/v0.1/dns-delay.yaml",
       "/scenarios/v0.1/dns-timeout.yaml",
-      "/scenarios/v0.1/peppol-route-proof.yaml");
+      "/scenarios/v0.1/peppol-route-proof.yaml",
+      "/scenarios/v0.1/route-dns-nxdomain.yaml",
+      "/scenarios/v0.1/route-smp-participant-missing.yaml",
+      "/scenarios/v0.1/route-smp-invalid-metadata.yaml",
+      "/scenarios/v0.1/route-as4-http-failure.yaml");
 
   private BuiltinCatalog() {}
 

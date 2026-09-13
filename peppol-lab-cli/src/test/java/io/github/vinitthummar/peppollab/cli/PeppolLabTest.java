@@ -57,6 +57,8 @@ class PeppolLabTest {
     assertThat(new CommandLine(new PeppolLab()).execute("run", "--output", output.toString())).isZero();
     assertThat(output.resolve("results.json")).isRegularFile();
     assertThat(output.resolve("junit.xml")).isRegularFile();
+    assertThat(output.resolve("route-summary.json")).isRegularFile();
+    assertThat(output.resolve("route-summary.txt")).isRegularFile();
     assertThat(output.resolve("pki/certificates.json")).isRegularFile();
     assertThat(output.resolve("pki/untrusted/certificates.json")).isRegularFile();
     String results = Files.readString(output.resolve("results.json"));
@@ -81,6 +83,27 @@ class PeppolLabTest {
             "payloadSha256")
         .doesNotContain(
             "receiverCertificateBase64", "pki-password", ".p12", "PRIVATE KEY");
+    assertThat(Files.readString(output.resolve("route-summary.txt")))
+        .contains(
+            "PEPPOL ROUTE PROOF",
+            "PASSED  peppol-route-proof",
+            "discover-smp  [SUCCESS]",
+            "retrieve-metadata  [SUCCESS]",
+            "deliver-as4  [SUCCESS]",
+            "route-dns-nxdomain",
+            "observed-failure=discover-smp",
+            "route-smp-participant-missing",
+            "observed-failure=retrieve-metadata",
+            "route-as4-http-failure",
+            "observed-failure=deliver-as4");
+    assertThat(Files.readString(output.resolve("route-summary.json")))
+        .contains(
+            "receiverCertificateSha256",
+            "receiptMessageId",
+            "NXDOMAIN",
+            "INVALID_METADATA",
+            "HTTP_ERROR")
+        .doesNotContain("receiverCertificateBase64", "PRIVATE KEY");
   }
 
   @Test

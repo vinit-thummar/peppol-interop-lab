@@ -1,0 +1,25 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: route-smp-participant-missing
+  description: Discovers the SMP but stops before delivery when the participant is not published
+  tags: [dns, smp, negative, route-proof]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [DNS_LOOKUP, SMP_LOOKUP, EVIDENCE]
+steps:
+  - id: discover-smp
+    target: dns-fixture
+    action: dns.lookup
+    with: { name: ok.sml.test, type: NAPTR }
+    expect: { status: 0, outcome: SUCCESS }
+  - id: retrieve-metadata
+    target: smp-fixture
+    action: smp.get
+    with:
+      baseUrl: ${steps.discover-smp.outputs.smpBaseUrl}
+      participantScheme: iso6523-actorid-upis
+      participantValue: unknown
+    expect:
+      status: 404
+      outcome: HTTP_ERROR
+      contains: [participant not found]
