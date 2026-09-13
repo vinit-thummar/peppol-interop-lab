@@ -8,6 +8,7 @@ import io.github.vinitthummar.peppollab.api.AdapterContext;
 import io.github.vinitthummar.peppollab.api.AdapterException;
 import io.github.vinitthummar.peppollab.api.AdapterRequest;
 import io.github.vinitthummar.peppollab.api.TargetConfig;
+import io.github.vinitthummar.peppollab.core.DnsFixture;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -15,6 +16,18 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class DnsAdapterTest {
+  @Test
+  void doctorPerformsAReadOnlyResolverProbe() throws Exception {
+    try (DnsFixture fixture = DnsFixture.start(URI.create("http://127.0.0.1:8080"))) {
+      var checks = new DnsAdapter().doctor(
+          new TargetConfig("dns", fixture.endpoint(), Map.of()),
+          new AdapterContext(Path.of("reports"), false, Map.of()));
+
+      assertTrue(checks.stream().allMatch(check -> check.successful()));
+      assertTrue(checks.stream().anyMatch(check -> check.name().equals("DNS connectivity")));
+    }
+  }
+
   @Test
   void blocksProductionDiscoveryNamesUntilExplicitlyAllowed() {
     DnsAdapter adapter = new DnsAdapter();

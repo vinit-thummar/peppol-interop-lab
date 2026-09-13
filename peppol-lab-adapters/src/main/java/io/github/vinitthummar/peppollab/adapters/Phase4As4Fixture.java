@@ -101,6 +101,11 @@ final class Phase4As4Fixture implements As4Fixture {
 
   private void handle(HttpExchange exchange) throws IOException {
     String path = exchange.getRequestURI().getRawPath();
+    if ("HEAD".equals(exchange.getRequestMethod()) && "/".equals(path)) {
+      exchange.sendResponseHeaders(204, -1);
+      exchange.close();
+      return;
+    }
     if ("GET".equals(exchange.getRequestMethod())
         && path.startsWith("/_lab/messages/")) {
       writeReceiverEvidence(exchange, path.substring("/_lab/messages/".length()));

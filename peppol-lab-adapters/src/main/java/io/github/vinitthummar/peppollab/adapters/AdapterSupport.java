@@ -3,6 +3,7 @@ package io.github.vinitthummar.peppollab.adapters;
 import io.github.vinitthummar.peppollab.api.AdapterContext;
 import io.github.vinitthummar.peppollab.api.AdapterException;
 import io.github.vinitthummar.peppollab.api.AdapterResult;
+import io.github.vinitthummar.peppollab.api.DoctorCheck;
 import io.github.vinitthummar.peppollab.api.Evidence;
 import io.github.vinitthummar.peppollab.api.TargetConfig;
 import java.io.IOException;
@@ -20,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 final class AdapterSupport {
   private AdapterSupport() {}
@@ -52,6 +54,39 @@ final class AdapterSupport {
     if (!base.endsWith("/") && !path.startsWith("/")) base += "/";
     if (base.endsWith("/") && path.startsWith("/")) path = path.substring(1);
     return URI.create(base + path);
+  }
+
+  static List<DoctorCheck> httpEndpointChecks(
+      HttpClient client, TargetConfig target, String label) {
+    URI endpoint = target.baseUrl();
+    boolean valid = endpoint != null
+        && endpoint.getHost() != null
+        && endpoint.getScheme() != null
+        && Set.of("http", "https").contains(endpoint.getScheme().toLowerCase(Locale.ROOT));
+    DoctorCheck address = new DoctorCheck(
+        label + " URL",
+        valid,
+        valid ? endpoint.toString() : label + " URL must use HTTP(S) and include a host");
+    if (!valid) return List.of(address);
+
+    try {
+      HttpRequest request = HttpRequest.newBuilder(endpoint)
+          .timeout(Duration.ofSeconds(3))
+          .method("HEAD", HttpRequest.BodyPublishers.noBody())
+          .build();
+      HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
+      return List.of(
+          address,
+          new DoctorCheck(label + " connectivity", true, "HTTP " + response.statusCode()));
+    } catch (InterruptedException ex) {
+      Thread.currentThread().interrupt();
+      return List.of(address, new DoctorCheck(label + " connectivity", false, "check interrupted"));
+    } catch (IOException | RuntimeException ex) {
+      String detail = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+      return List.of(
+          address,
+          new DoctorCheck(label + " connectivity", false, "unreachable: " + detail));
+    }
   }
 
   static String parameter(Map<String, Object> parameters, String name, String fallback) {

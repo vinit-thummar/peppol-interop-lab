@@ -5,6 +5,7 @@ import io.github.vinitthummar.peppollab.api.AdapterException;
 import io.github.vinitthummar.peppollab.api.AdapterRequest;
 import io.github.vinitthummar.peppollab.api.AdapterResult;
 import io.github.vinitthummar.peppollab.api.Capability;
+import io.github.vinitthummar.peppollab.api.DoctorCheck;
 import io.github.vinitthummar.peppollab.api.Evidence;
 import io.github.vinitthummar.peppollab.api.TargetAdapter;
 import io.github.vinitthummar.peppollab.api.TargetConfig;
@@ -41,6 +42,35 @@ public final class DnsAdapter implements TargetAdapter {
   @Override
   public Set<Capability> capabilities(TargetConfig target) {
     return Set.of(Capability.DNS_LOOKUP, Capability.FAULT_INJECTION, Capability.EVIDENCE);
+  }
+
+  @Override
+  public List<DoctorCheck> doctor(TargetConfig target, AdapterContext context) {
+    URI endpoint = target.baseUrl();
+    boolean valid = endpoint != null && endpoint.getHost() != null;
+    DoctorCheck address = new DoctorCheck(
+        "DNS resolver",
+        valid,
+        valid ? endpoint.toString() : "DNS resolver must include a host");
+    if (!valid) return List.of(address);
+
+    try {
+      AdapterResult result = execute(
+          target,
+          new AdapterRequest(
+              "dns.lookup", Map.of("name", "ok.sml.test", "type", "NAPTR"),
+              Duration.ofSeconds(3)),
+          context);
+      boolean responded = result.statusCode() != null;
+      return List.of(
+          address,
+          new DoctorCheck(
+              "DNS connectivity",
+              responded,
+              responded ? "resolver responded with " + result.outcome() : result.body()));
+    } catch (AdapterException ex) {
+      return List.of(address, new DoctorCheck("DNS connectivity", false, ex.getMessage()));
+    }
   }
 
   @Override
