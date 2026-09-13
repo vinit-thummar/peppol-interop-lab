@@ -22,6 +22,21 @@ class StandardSmpAdapterTest {
   @TempDir Path output;
 
   @Test
+  void doctorVerifiesTheEndpointWithoutRequiringAKnownParticipant() throws Exception {
+    AtomicReference<String> requestedPath = new AtomicReference<>();
+    try (SmpServer server = SmpServer.start(validMetadata(), requestedPath)) {
+      var checks = new StandardSmpAdapter().doctor(
+          new TargetConfig("standard-smp", server.endpoint(), Map.of()),
+          new AdapterContext(output, false, Map.of()));
+
+      assertThat(checks).allMatch(check -> check.successful());
+      assertThat(checks).extracting(check -> check.name())
+          .containsExactly("SMP endpoint URL", "SMP endpoint connectivity");
+      assertThat(requestedPath).hasValue("/");
+    }
+  }
+
+  @Test
   void encodesStructuredParticipantAndDocumentIdentifiers() throws Exception {
     AtomicReference<String> requestedPath = new AtomicReference<>();
     try (SmpServer server = SmpServer.start(validMetadata(), requestedPath)) {
@@ -122,6 +137,11 @@ class StandardSmpAdapterTest {
     }
 
     private static void respond(HttpExchange exchange, String body) throws IOException {
+      if ("HEAD".equals(exchange.getRequestMethod())) {
+        exchange.sendResponseHeaders(200, -1);
+        exchange.close();
+        return;
+      }
       byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
       exchange.getResponseHeaders().set("Content-Type", "application/xml");
       exchange.sendResponseHeaders(200, bytes.length);

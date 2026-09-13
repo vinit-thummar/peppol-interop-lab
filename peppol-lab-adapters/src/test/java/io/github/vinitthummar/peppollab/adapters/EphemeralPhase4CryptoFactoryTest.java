@@ -4,12 +4,34 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.helger.phase4.crypto.ECryptoMode;
+import io.github.vinitthummar.peppollab.api.AdapterContext;
+import io.github.vinitthummar.peppollab.api.TargetConfig;
 import io.github.vinitthummar.peppollab.core.EphemeralPki;
+import java.net.URI;
+import java.nio.file.Path;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class EphemeralPhase4CryptoFactoryTest {
+  @Test
+  void doctorValidatesTheCompleteEphemeralIdentity() throws Exception {
+    try (EphemeralPki pki = EphemeralPki.create()) {
+      var checks = new DirectAs4Adapter().doctor(
+          new TargetConfig("direct-as4", URI.create("http://127.0.0.1:9"), Map.of()),
+          new AdapterContext(Path.of("."), false, pki.runtimeValues()));
+
+      assertThat(checks).anySatisfy(check -> {
+        assertThat(check.name()).isEqualTo("AS4 sender identity");
+        assertThat(check.successful()).isTrue();
+      }).anySatisfy(check -> {
+        assertThat(check.name()).isEqualTo("AS4 receiver certificate");
+        assertThat(check.successful()).isTrue();
+      });
+    }
+  }
+
   @Test
   void loadsBothLaboratoryIdentitiesForPhase4() throws Exception {
     try (EphemeralPki pki = EphemeralPki.create()) {

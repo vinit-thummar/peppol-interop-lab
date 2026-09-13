@@ -177,6 +177,11 @@ public final class EmbeddedLab implements AutoCloseable {
     byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
     exchange.getResponseHeaders().set("Content-Type", contentType);
     exchange.getResponseHeaders().set("Cache-Control", "no-store");
+    if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
+      exchange.sendResponseHeaders(status, -1);
+      exchange.close();
+      return;
+    }
     exchange.sendResponseHeaders(status, bytes.length);
     try (var out = exchange.getResponseBody()) {
       out.write(bytes);

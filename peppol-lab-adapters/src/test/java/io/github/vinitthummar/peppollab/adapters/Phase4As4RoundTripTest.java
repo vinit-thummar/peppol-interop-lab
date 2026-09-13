@@ -17,6 +17,22 @@ class Phase4As4RoundTripTest {
   @TempDir Path output;
 
   @Test
+  void doctorReceivesACleanPreflightResponseFromTheFixture() throws Exception {
+    try (EphemeralPki pki = EphemeralPki.create();
+         Phase4As4Fixture fixture = Phase4As4Fixture.start(pki)) {
+      var checks = new DirectAs4Adapter().doctor(
+          new TargetConfig("direct-as4", fixture.endpoint(), Map.of()),
+          new AdapterContext(output, false, pki.runtimeValues()));
+
+      assertThat(checks).allMatch(check -> check.successful());
+      assertThat(checks).anySatisfy(check -> {
+        assertThat(check.name()).isEqualTo("AS4 endpoint connectivity");
+        assertThat(check.message()).isEqualTo("HTTP 204");
+      });
+    }
+  }
+
+  @Test
   void sendsEncryptedPayloadAndStrictlyVerifiesSignedReceipt() throws Exception {
     String messageId = "roundtrip-001@interop-lab";
     String payload =

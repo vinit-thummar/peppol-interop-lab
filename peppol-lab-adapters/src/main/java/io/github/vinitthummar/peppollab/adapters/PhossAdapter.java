@@ -5,6 +5,7 @@ import io.github.vinitthummar.peppollab.api.AdapterException;
 import io.github.vinitthummar.peppollab.api.AdapterRequest;
 import io.github.vinitthummar.peppollab.api.AdapterResult;
 import io.github.vinitthummar.peppollab.api.Capability;
+import io.github.vinitthummar.peppollab.api.DoctorCheck;
 import io.github.vinitthummar.peppollab.api.TargetAdapter;
 import io.github.vinitthummar.peppollab.api.TargetConfig;
 import java.net.URI;
@@ -46,6 +47,21 @@ public final class PhossAdapter implements TargetAdapter {
     }
     if (publisherApiEnabled(target)) result.add(Capability.SMP_PROVISION);
     return Set.copyOf(result);
+  }
+
+  @Override
+  public List<DoctorCheck> doctor(TargetConfig target, AdapterContext context) {
+    List<DoctorCheck> checks = new ArrayList<>(
+        AdapterSupport.httpEndpointChecks(client, target, "phoss endpoint"));
+    try {
+      HttpRequest.Builder request = HttpRequest.newBuilder();
+      authenticate(target, request, publisherApiEnabled(target) || apApiEnabled(target));
+      checks.add(new DoctorCheck(
+          "phoss API credentials", true, "configured references are readable"));
+    } catch (AdapterException | IllegalArgumentException ex) {
+      checks.add(new DoctorCheck("phoss API credentials", false, ex.getMessage()));
+    }
+    return List.copyOf(checks);
   }
 
   @Override

@@ -30,6 +30,28 @@ class PeppolLabTest {
   }
 
   @Test
+  void doctorChecksConfiguredTargetsAndFixtureAvailability() throws Exception {
+    Path config = temporary.resolve("doctor.yml");
+    Files.writeString(config, """
+        targets:
+          public-smp:
+            adapter: standard-smp
+            baseUrl: fixture:smp
+        """);
+
+    CommandLine command = new CommandLine(new PeppolLab());
+    assertThat(command.execute("doctor", "--config", config.toString())).isZero();
+    assertThat(command.execute(
+        "doctor", "--config", config.toString(), "--no-fixtures")).isEqualTo(3);
+  }
+
+  @Test
+  void doctorTreatsUnreadableConfigurationAsInvalidInput() {
+    assertThat(new CommandLine(new PeppolLab()).execute(
+        "doctor", "--config", temporary.resolve("missing.yml").toString())).isEqualTo(2);
+  }
+
+  @Test
   void bundledPreflightRunsAndWritesBothReports() throws Exception {
     Path output = temporary.resolve("evidence");
     assertThat(new CommandLine(new PeppolLab()).execute("run", "--output", output.toString())).isZero();

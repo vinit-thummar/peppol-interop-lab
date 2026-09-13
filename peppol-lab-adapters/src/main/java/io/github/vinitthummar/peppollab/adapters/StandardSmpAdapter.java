@@ -26,8 +26,7 @@ public final class StandardSmpAdapter implements TargetAdapter {
   }
 
   @Override public List<DoctorCheck> doctor(TargetConfig target, AdapterContext context) {
-    boolean http = Set.of("http", "https").contains(target.baseUrl().getScheme());
-    return List.of(new DoctorCheck("SMP URL", http, http ? target.baseUrl().toString() : "SMP URL must use HTTP(S)"));
+    return AdapterSupport.httpEndpointChecks(client, target, "SMP endpoint");
   }
 
   @Override

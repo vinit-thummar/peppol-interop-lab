@@ -117,6 +117,18 @@ java -jar peppol-lab-cli/target/peppol-lab.jar list
 java -jar peppol-lab-cli/target/peppol-lab.jar run
 ```
 
+Before running scenarios against an implementation, inspect every configured target with the
+read-only preflight:
+
+```bash
+java -jar peppol-lab-cli/target/peppol-lab.jar doctor \
+  --config my-lab/peppol-lab.yml --no-fixtures
+```
+
+The doctor resolves referenced secret files and environment variables without printing or sending
+their values, validates direct-AS4 key material and certificates, and checks HTTP/DNS connectivity.
+Known production Peppol targets remain blocked unless `--allow-production` is supplied explicitly.
+
 Release tags produce a versioned runnable JAR, the standalone scenario JSON Schema, and a
 `SHA256SUMS` file on GitHub Releases. The same tag publishes
 `ghcr.io/vinit-thummar/peppol-interop-lab:<version>` and updates `latest`. See the

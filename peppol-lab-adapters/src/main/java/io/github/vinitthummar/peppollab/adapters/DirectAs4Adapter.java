@@ -19,6 +19,7 @@ import io.github.vinitthummar.peppollab.api.AdapterException;
 import io.github.vinitthummar.peppollab.api.AdapterRequest;
 import io.github.vinitthummar.peppollab.api.AdapterResult;
 import io.github.vinitthummar.peppollab.api.Capability;
+import io.github.vinitthummar.peppollab.api.DoctorCheck;
 import io.github.vinitthummar.peppollab.api.Evidence;
 import io.github.vinitthummar.peppollab.api.TargetAdapter;
 import io.github.vinitthummar.peppollab.api.TargetConfig;
@@ -60,6 +61,43 @@ public final class DirectAs4Adapter implements TargetAdapter {
   @Override
   public Set<Capability> capabilities(TargetConfig target) {
     return Set.of(Capability.AS4_SEND, Capability.EVIDENCE);
+  }
+
+  @Override
+  public List<DoctorCheck> doctor(TargetConfig target, AdapterContext context) {
+    List<DoctorCheck> checks = new ArrayList<>(
+        AdapterSupport.httpEndpointChecks(client, target, "AS4 endpoint"));
+    char[] password = null;
+    try {
+      String keyStoreReference = setting(
+          target, context, "senderKeyStore", "fixture:pki-sender");
+      String passwordReference = setting(
+          target, context, "senderKeyPassword", "fixture:pki-password");
+      String trustReference = setting(
+          target, context, "trustCertificate", "fixture:pki-ca");
+      String keyAlias = target.options().getOrDefault("senderKeyAlias", "sender");
+      password = AdapterSupport.secret(passwordReference).toCharArray();
+      try (EphemeralPhase4CryptoFactory ignored = EphemeralPhase4CryptoFactory.load(
+          path(keyStoreReference), keyAlias, password, certificate(path(trustReference)))) {
+        checks.add(new DoctorCheck(
+            "AS4 sender identity", true, "keystore, alias, password, and trust anchor are valid"));
+      }
+    } catch (Exception ex) {
+      checks.add(new DoctorCheck("AS4 sender identity", false, diagnostic(ex)));
+    } finally {
+      if (password != null) Arrays.fill(password, '\0');
+    }
+
+    try {
+      String receiverReference = setting(
+          target, context, "receiverCertificate", "fixture:pki-receiver-cert");
+      certificate(path(receiverReference));
+      checks.add(new DoctorCheck(
+          "AS4 receiver certificate", true, "readable X.509 certificate"));
+    } catch (Exception ex) {
+      checks.add(new DoctorCheck("AS4 receiver certificate", false, diagnostic(ex)));
+    }
+    return List.copyOf(checks);
   }
 
   @Override
@@ -328,6 +366,10 @@ public final class DirectAs4Adapter implements TargetAdapter {
       return (X509Certificate) CertificateFactory.getInstance("X.509")
           .generateCertificate(input);
     }
+  }
+
+  private static String diagnostic(Exception ex) {
+    return ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
   }
 
   private static String describe(Throwable throwable) {

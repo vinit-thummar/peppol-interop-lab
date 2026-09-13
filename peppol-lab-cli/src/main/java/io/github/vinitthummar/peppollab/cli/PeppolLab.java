@@ -94,25 +94,86 @@ public final class PeppolLab implements Runnable {
 
   @Command(name = "doctor", description = "Check the local runtime and installed adapters")
   static final class Doctor implements Callable<Integer> {
+    @Option(names = {"-c", "--config"}, description = "Configuration whose targets should be checked")
+    Path configPath;
+    @Option(names = "--allow-production") boolean allowProduction;
+    @Option(names = "--no-fixtures") boolean noFixtures;
+
     @Override public Integer call() {
       int javaFeature = Runtime.version().feature();
       boolean javaOk = javaFeature >= 21;
       System.out.println(mark(javaOk) + " Java " + javaFeature + (javaOk ? "" : " (Java 21+ required)"));
       boolean docker = commandOk("docker", "info");
       System.out.println(mark(docker) + " Docker" + (docker ? "" : " (required for external container targets)"));
-      try (AdapterRegistry registry = AdapterRegistry.load(); EmbeddedLab lab = EmbeddedLab.start()) {
+
+      LabConfig config;
+      try {
+        config = configPath == null ? defaultConfig() : new ScenarioLoader().loadConfig(configPath);
+      } catch (Exception ex) {
+        System.err.println("Invalid configuration: " + ex.getMessage());
+        return 2;
+      }
+
+      boolean fixturesRequired = config.targets().values().stream().anyMatch(Doctor::usesFixture);
+      try (EmbeddedLab lab = fixturesRequired && !noFixtures ? EmbeddedLab.start() : null;
+           AdapterRegistry registry = AdapterRegistry.load()) {
+        Map<String, String> runtime = lab == null ? Map.of() : lab.runtimeValues();
+        AdapterContext context = new AdapterContext(Path.of("."), allowProduction, runtime);
         System.out.println(mark(!registry.all().isEmpty()) + " adapters: "
             + registry.all().stream().map(TargetAdapter::id).sorted().toList());
-        System.out.println("OK  loopback HTTP and DNS fixtures: " + lab.runtimeValues().get("fixture:dns"));
-        System.out.println("OK  per-run ephemeral PKI");
+        if (lab != null) {
+          System.out.println("OK  loopback HTTP and DNS fixtures: " + runtime.get("fixture:dns"));
+          System.out.println("OK  per-run ephemeral PKI");
+        }
+
+        boolean targetsOk = true;
+        for (Map.Entry<String, TargetConfig> entry : config.targets().entrySet().stream()
+            .sorted(Map.Entry.comparingByKey()).toList()) {
+          String name = entry.getKey();
+          try {
+            TargetConfig target = resolveTarget(entry.getValue(), runtime);
+            ProductionGuard.check(target.baseUrl(), allowProduction);
+            TargetAdapter adapter = registry.require(target.adapter());
+            System.out.println("TARGET " + name + " [" + adapter.id() + "] capabilities="
+                + adapter.capabilities(target).stream().sorted().toList());
+            List<DoctorCheck> checks = adapter.doctor(target, context);
+            if (checks.isEmpty()) {
+              System.out.println("  OK  adapter loaded");
+            }
+            for (DoctorCheck check : checks) {
+              System.out.println("  " + checkMark(check.successful()) + check.name() + ": " + check.message());
+              targetsOk &= check.successful();
+            }
+          } catch (Exception ex) {
+            System.out.println("  ERR target: " + ex.getMessage());
+            targetsOk = false;
+          }
+        }
+        return javaOk && targetsOk ? 0 : 3;
       } catch (Exception ex) {
         System.err.println("ERR fixtures/adapters: " + ex.getMessage());
         return 3;
       }
-      return javaOk ? 0 : 3;
+    }
+
+    private static boolean usesFixture(TargetConfig target) {
+      return (target.baseUrl() != null && "fixture".equalsIgnoreCase(target.baseUrl().getScheme()))
+          || target.options().values().stream().anyMatch(value -> value.startsWith("fixture:"));
+    }
+
+    private static TargetConfig resolveTarget(
+        TargetConfig target, Map<String, String> runtime) {
+      URI baseUrl = target.baseUrl();
+      if (baseUrl != null && "fixture".equalsIgnoreCase(baseUrl.getScheme())) {
+        String resolved = runtime.get(baseUrl.toString());
+        if (resolved == null) throw new IllegalArgumentException("Fixture is unavailable: " + baseUrl);
+        baseUrl = URI.create(resolved);
+      }
+      return new TargetConfig(target.adapter(), baseUrl, target.options());
     }
 
     private static String mark(boolean ok) { return ok ? "OK " : "WARN "; }
+    private static String checkMark(boolean ok) { return ok ? "OK  " : "ERR "; }
     private static boolean commandOk(String... command) {
       try {
         Process process = new ProcessBuilder(command).redirectErrorStream(true).start();

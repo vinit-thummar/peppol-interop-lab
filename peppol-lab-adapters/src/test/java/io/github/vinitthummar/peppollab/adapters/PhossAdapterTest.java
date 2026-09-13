@@ -236,6 +236,48 @@ class PhossAdapterTest {
   }
 
   @Test
+  void doctorChecksCredentialsWithoutSendingThem() throws Exception {
+    AtomicReference<String> stored = new AtomicReference<>();
+    List<CapturedRequest> requests = new CopyOnWriteArrayList<>();
+    try (HttpServerFixture fixture = HttpServerFixture.start(stored, requests)) {
+      Path password = output.resolve("doctor-password.txt");
+      Files.writeString(password, "never-send-me", StandardCharsets.UTF_8);
+
+      var checks = new PhossAdapter().doctor(
+          target(fixture.endpoint(), password),
+          new AdapterContext(output, false, Map.of()));
+
+      assertThat(checks).allMatch(check -> check.successful());
+      assertThat(checks).extracting(check -> check.name())
+          .contains("phoss endpoint connectivity", "phoss API credentials");
+      assertThat(requests).singleElement().satisfies(request -> {
+        assertThat(request.method()).isEqualTo("HEAD");
+        assertThat(request.authorization()).isNull();
+        assertThat(request.body()).doesNotContain("never-send-me");
+      });
+    }
+  }
+
+  @Test
+  void doctorReportsAnUnreadableCredentialReference() {
+    TargetConfig target = new TargetConfig(
+        "phoss",
+        URI.create("http://127.0.0.1:9"),
+        Map.of(
+            "publisherApi", "true",
+            "username", "interop",
+            "password", output.resolve("missing-password.txt").toUri().toString()));
+
+    assertThat(new PhossAdapter().doctor(
+        target, new AdapterContext(output, false, Map.of())))
+        .anySatisfy(check -> {
+          assertThat(check.name()).isEqualTo("phoss API credentials");
+          assertThat(check.successful()).isFalse();
+          assertThat(check.message()).contains("Cannot read secret file");
+        });
+  }
+
+  @Test
   void rejectsIncompletePhossApSubmissionBeforeNetworkAccess() {
     PhossAdapter adapter = new PhossAdapter();
     AdapterRequest request = new AdapterRequest(
@@ -372,6 +414,11 @@ class PhossAdapterTest {
     }
 
     private static void respond(HttpExchange exchange, int status, String body) throws IOException {
+      if ("HEAD".equals(exchange.getRequestMethod())) {
+        exchange.sendResponseHeaders(status, -1);
+        exchange.close();
+        return;
+      }
       byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
       exchange.getResponseHeaders().set("Content-Type", "application/xml");
       exchange.sendResponseHeaders(status, bytes.length);
