@@ -1,0 +1,17 @@
+apiVersion: peppol-interop-lab/v1alpha1
+kind: Scenario
+metadata:
+  name: route-dns-nxdomain
+  description: Proves that participant discovery stops at DNS when no SMP record exists
+  tags: [dns, negative, route-proof, resilience]
+specifications: { smp: "1.4.0", as4: "2.0.3", sbdh: "2.0.2" }
+requires: [DNS_LOOKUP, EVIDENCE]
+steps:
+  - id: discover-smp
+    target: dns-fixture
+    action: dns.lookup
+    with: { name: nxdomain.sml.test, type: NAPTR }
+    expect:
+      status: 3
+      outcome: NXDOMAIN
+      headers: { DNS-Rcode: NXDOMAIN }
